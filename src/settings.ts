@@ -1,18 +1,18 @@
 import {App, PluginSettingTab, Setting} from "obsidian";
-import MyPlugin from "./main";
+import TaskFilterPlugin from "./main";
 
 export interface MyPluginSettings {
-	mySetting: string;
+	hiddenTags: string[];
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+	hiddenTags: ['#task']
 }
 
 export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+	plugin: TaskFilterPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: TaskFilterPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -22,14 +22,20 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
+		containerEl.createEl('h2', { text: '任务过滤器设置' });
+
 		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+			.setName('隐藏的标签')
+			.setDesc('在标签列表中隐藏这些标签（每行一个，包含 # 号）')
+			.addTextArea(text => text
+				.setPlaceholder('#task\n#hidden')
+				.setValue(this.plugin.settings.hiddenTags.join('\n'))
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					// 按行分割，过滤空行，并去除首尾空格
+					this.plugin.settings.hiddenTags = value
+						.split('\n')
+						.map(tag => tag.trim().toLowerCase())
+						.filter(tag => tag.length > 0);
 					await this.plugin.saveSettings();
 				}));
 	}

@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "task-filter-plugin",
+	"name": "Task Filter Plugin",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "通过标签过滤任务文件。显示所有标签列表，支持多选标签，筛选带有 #task 标签的文件。",
+	"author": "TOM",
+	"authorUrl": "",
 	"isDesktopOnly": false
 }

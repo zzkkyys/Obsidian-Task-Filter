@@ -21,10 +21,25 @@ export default class TaskFilterPlugin extends Plugin {
             return this.taskResultView;
         });
 
-        // 添加侧边栏图标
-        this.addRibbonIcon("tags", "打开标签过滤器", () => {
+        // 添加功能区（ribbon）图标
+        const ribbonIconEl = this.addRibbonIcon("tags", "打开标签过滤器", () => {
             this.activateTagFilterView();
         });
+        ribbonIconEl.addClass("task-filter-ribbon-icon");
+
+        // Obsidian 内置 icon 是单色的；这里注入自定义彩色 SVG 作为真正的“彩色图标”
+        ribbonIconEl.empty();
+        ribbonIconEl.innerHTML = `
+            <svg class="task-filter-ribbon-icon-svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <!-- tag -->
+                <path d="M20.59 13.41 12 4.83V4H4v8h.83l8.58 8.59a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.82Z" fill="#22c55e"/>
+                <path d="M7.5 7.5h.01" stroke="#0f172a" stroke-width="2.5" stroke-linecap="round"/>
+                <!-- coin -->
+                <circle cx="17.5" cy="17.5" r="4.25" fill="#f59e0b" stroke="#0f172a" stroke-width="1.25"/>
+                <path d="M16.2 17.5h2.6" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M17.5 16.2v2.6" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        `;
 
         // 添加命令：打开标签过滤器
         this.addCommand({
@@ -41,6 +56,16 @@ export default class TaskFilterPlugin extends Plugin {
             name: "打开任务列表",
             callback: () => {
                 this.activateTaskResultView();
+            },
+        });
+
+        // 添加命令：打开插件视图（同时打开标签过滤 + 任务列表）
+        this.addCommand({
+            id: "open-task-filter-workspace",
+            name: "打开任务筛选面板（标签过滤 + 任务列表）",
+            callback: async () => {
+                await this.activateTagFilterView();
+                await this.activateTaskResultView();
             },
         });
 

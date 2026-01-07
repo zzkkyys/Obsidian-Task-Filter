@@ -12,6 +12,23 @@
  * Task Filter Plugin Styles
  */
 
+/* ========== 功能区（Ribbon）图标 ========== */
+.task-filter-ribbon-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.task-filter-ribbon-icon:hover {
+    filter: brightness(1.05);
+}
+
+.task-filter-ribbon-icon-svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
 /* ========== 标签过滤视图 ========== */
 .tag-filter-container {
     padding: 10px;

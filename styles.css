@@ -1,3 +1,13 @@
+/* 金额标签 */
+.task-meta-money {
+    background-color: rgba(234, 179, 8, 0.18);
+    color: #b45309;
+    font-weight: 500;
+}
+.theme-dark .task-meta-money {
+    background-color: rgba(234, 179, 8, 0.28);
+    color: #fde68a;
+}
 /*
  * Task Filter Plugin Styles
  */
@@ -337,6 +347,13 @@
     font-weight: 500;
 }
 
+.task-money-summary {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-accent);
+    font-weight: 600;
+}
+
 .task-result-list {
     display: flex;
     flex-direction: column;
@@ -623,6 +640,21 @@
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
+}
+
+/* 项目视图列头左侧：项目名 + 待报销汇总 */
+.task-kanban-column-header-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+
+.task-project-money-summary {
+    font-size: 12px;
+    color: var(--text-accent);
+    line-height: 1.2;
 }
 
 .task-kanban-column-title {

@@ -1,4 +1,32 @@
-import { ItemView, WorkspaceLeaf, TFile, Menu } from "obsidian";
+import { App, ItemView, WorkspaceLeaf, TFile, Menu, Modal, Setting } from "obsidian";
+// 简单金额输入模态框
+class MoneyInputModal extends Modal {
+    onSubmit: (value: string) => void;
+    suggested: string;
+    constructor(app: App, suggested: string, onSubmit: (value: string) => void) {
+        super(app);
+        this.suggested = suggested;
+        this.onSubmit = onSubmit;
+    }
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl("h3", { text: "请输入报销金额" });
+        let value = this.suggested;
+        const input = contentEl.createEl("input", { type: "number", value: this.suggested, attr: { step: "0.01", min: "0" } });
+        input.addEventListener("input", () => { value = input.value; });
+        new Setting(contentEl)
+            .addButton(btn => btn.setButtonText("确定").setCta().onClick(() => {
+                if (value && !isNaN(Number(value))) {
+                    this.close();
+                    this.onSubmit(value);
+                }
+            }))
+            .addExtraButton(btn => btn.setIcon("cross").setTooltip("取消").onClick(() => this.close()));
+        input.focus();
+        input.select();
+    }
+}
 import type TaskFilterPlugin from "../main";
 import { getTaskFiles, filterTaskFilesByTags, TaskFile } from "../utils/tagScanner";
 
@@ -249,6 +277,19 @@ export class TaskResultView extends ItemView {
             text: `找到 ${this.taskFiles.length} 个任务文件`,
         });
 
+        // 列表/看板视图：显示未完成任务的金额汇总
+        if (this.viewMode === "list" || this.viewMode === "kanban") {
+            const moneySum = this.taskFiles
+                .filter(t => this.normalizeStatus(t.status) !== "done" && typeof t.money === "number" && t.money > 0)
+                .reduce((sum, t) => sum + (t.money ?? 0), 0);
+            if (moneySum > 0) {
+                statsEl.createEl("div", {
+                    cls: "task-money-summary",
+                    text: `💰待报销合计: ￥${moneySum.toFixed(2)}`,
+                });
+            }
+        }
+
         // 根据视图模式渲染
         if (this.viewMode === "kanban") {
             this.renderKanbanView(mainContainer);
@@ -366,9 +407,13 @@ export class TaskResultView extends ItemView {
         // 渲染每个项目列
         for (const project of sortedProjects) {
             const tasks = tasksByProject.get(project)!;
-            
             // 如果是未分类且没有任务，跳过
             if (project === "未分类" && tasks.length === 0) continue;
+
+            // 统计未完成任务的 money 总和
+            const moneySum = tasks
+                .filter(t => this.normalizeStatus(t.status) !== "done" && typeof t.money === "number" && t.money > 0)
+                .reduce((sum, t) => sum + (t.money ?? 0), 0);
 
             const columnEl = kanbanEl.createEl("div", {
                 cls: "task-kanban-column task-project-column",
@@ -378,10 +423,24 @@ export class TaskResultView extends ItemView {
             const columnHeaderEl = columnEl.createEl("div", {
                 cls: "task-kanban-column-header",
             });
-            columnHeaderEl.createEl("span", {
+
+            const headerLeftEl = columnHeaderEl.createEl("div", {
+                cls: "task-kanban-column-header-left",
+            });
+
+            headerLeftEl.createEl("span", {
                 text: `📁 ${project}`,
                 cls: "task-kanban-column-title",
             });
+
+            // 如果有 money 汇总，显示在项目名下一行
+            if (moneySum > 0) {
+                headerLeftEl.createEl("div", {
+                    text: `💰待报销: ￥${moneySum.toFixed(2)}`,
+                    cls: "task-project-money-summary",
+                });
+            }
+
             columnHeaderEl.createEl("span", {
                 text: `(${tasks.length})`,
                 cls: "task-kanban-column-count",
@@ -487,6 +546,17 @@ export class TaskResultView extends ItemView {
             });
             dueEl.createEl("span", { text: "📅 ", cls: "task-meta-icon" });
             dueEl.createEl("span", { text: this.formatDueWithDays(taskFile.due, daysRemaining) });
+        }
+
+
+        // 金额标签
+        if (typeof taskFile.money === "number" && taskFile.money > 0) {
+            const moneyEl = metaEl.createEl("span", {
+                cls: "task-meta-item task-meta-money",
+                attr: { title: "报销金额" },
+            });
+            moneyEl.createEl("span", { text: "💰", cls: "task-meta-icon" });
+            moneyEl.createEl("span", { text: `￥${taskFile.money.toFixed(2)}` });
         }
 
         // 项目
@@ -674,6 +744,7 @@ export class TaskResultView extends ItemView {
             }
         });
 
+
         // 设置到期时间（今天/明天/下周/清除）
         menu.addItem((item) => {
             item.setTitle("设置到期时间")
@@ -717,6 +788,21 @@ export class TaskResultView extends ItemView {
                         await this.removeTaskField(taskFile.file, "due");
                     });
             });
+        });
+
+        // 添加金额
+        menu.addItem((item) => {
+            item.setTitle("添加金额")
+                .setIcon("dollar-sign")
+                .onClick(() => {
+                    const match = taskFile.title.match(/([0-9]+(?:\.[0-9]+)?)/);
+                    const suggested = match?.[1] ?? "";
+                    new MoneyInputModal(this.app, suggested, async (input) => {
+                        if (input && !isNaN(Number(input))) {
+                            await this.updateTaskField(taskFile.file, "money", input);
+                        }
+                    }).open();
+                });
         });
 
         menu.addSeparator();

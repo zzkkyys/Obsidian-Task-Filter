@@ -27,6 +27,42 @@ class MoneyInputModal extends Modal {
         input.select();
     }
 }
+
+// 简单标签输入模态框
+class TagInputModal extends Modal {
+    onSubmit: (value: string) => void;
+    constructor(app: App, onSubmit: (value: string) => void) {
+        super(app);
+        this.onSubmit = onSubmit;
+    }
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl("h3", { text: "自定义输入标签" });
+        contentEl.createEl("p", { text: "示例：#food 或 #project/alpha" });
+
+        let value = "";
+        const input = contentEl.createEl("input", {
+            type: "text",
+            attr: { placeholder: "#tag 或 #a/b/c" },
+        });
+        input.addEventListener("input", () => {
+            value = input.value;
+        });
+
+        new Setting(contentEl)
+            .addButton(btn => btn.setButtonText("确定").setCta().onClick(() => {
+                const v = value.trim();
+                if (v) {
+                    this.close();
+                    this.onSubmit(v);
+                }
+            }))
+            .addExtraButton(btn => btn.setIcon("cross").setTooltip("取消").onClick(() => this.close()));
+
+        input.focus();
+    }
+}
 import type TaskFilterPlugin from "../main";
 import { getTaskFiles, filterTaskFilesByTags, TaskFile } from "../utils/tagScanner";
 
@@ -34,6 +70,12 @@ export const TASK_RESULT_VIEW_TYPE = "task-result-view";
 
 type ViewMode = "list" | "kanban" | "project" | "today";
 type SortMode = "due" | "priority" | "title" | "created";
+
+type TagTreeNode = {
+    label: string;
+    fullTag: string | null;
+    children: Map<string, TagTreeNode>;
+};
 
 // 状态列定义
 const STATUS_COLUMNS = [
@@ -56,6 +98,7 @@ export class TaskResultView extends ItemView {
     plugin: TaskFilterPlugin;
     private selectedTags: string[] = [];
     private taskFiles: TaskFile[] = [];
+    private allTaskTags: string[] = [];
     private viewMode: ViewMode = "list";
     private sortMode: SortMode = "due";
     private hideDone: boolean = false;
@@ -93,6 +136,10 @@ export class TaskResultView extends ItemView {
     async refresh(): Promise<void> {
         // 获取所有 #task 文件
         const allTaskFiles = await getTaskFiles(this.app);
+
+        // 缓存“所有任务标签”（用于右键菜单二级列表）
+        this.allTaskTags = this.collectAllTaskTags(allTaskFiles);
+
         // 根据选中的标签进行过滤
         let filtered = filterTaskFilesByTags(allTaskFiles, this.selectedTags);
         
@@ -116,6 +163,47 @@ export class TaskResultView extends ItemView {
         // 排序
         this.taskFiles = this.sortTasks(filtered);
         this.render();
+    }
+
+    private collectAllTaskTags(taskFiles: TaskFile[]): string[] {
+        const tagOriginal = new Map<string, string>();
+        for (const tf of taskFiles) {
+            for (const tag of tf.tags) {
+                const lower = tag.toLowerCase();
+                if (lower === "#task") continue;
+                if (!tagOriginal.has(lower)) tagOriginal.set(lower, tag);
+            }
+        }
+        return Array.from(tagOriginal.values()).sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: "base" })
+        );
+    }
+
+    private normalizeTagForCompare(tag: string): string {
+        const t = tag.trim();
+        const noHash = t.startsWith("#") ? t.slice(1) : t;
+        return noHash.toLowerCase();
+    }
+
+    private buildTagTree(tags: string[]): TagTreeNode {
+        const root: TagTreeNode = { label: "", fullTag: null, children: new Map() };
+        for (const originalTag of tags) {
+            const raw = originalTag.startsWith("#") ? originalTag.slice(1) : originalTag;
+            const parts = raw.split("/").filter((p): p is string => p.length > 0);
+            if (parts.length === 0) continue;
+
+            let node = root;
+            for (const part of parts) {
+                const existing = node.children.get(part);
+                const child: TagTreeNode = existing ?? { label: part, fullTag: null, children: new Map() };
+                if (!existing) node.children.set(part, child);
+                node = child;
+            }
+
+            // 叶子节点代表完整 tag
+            node.fullTag = originalTag;
+        }
+        return root;
     }
 
     private sortTasks(tasks: TaskFile[]): TaskFile[] {
@@ -805,6 +893,37 @@ export class TaskResultView extends ItemView {
                 });
         });
 
+        // 添加标签（二级列表：列出所有任务标签）
+        menu.addItem((item) => {
+            item.setTitle("添加标签")
+                .setIcon("tag");
+
+            const tagSubmenu = (item as any).setSubmenu() as Menu;
+
+            // 顶部：自定义输入
+            tagSubmenu.addItem((subItem) => {
+                subItem.setTitle("自定义输入…")
+                    .setIcon("pencil")
+                    .onClick(() => {
+                        new TagInputModal(this.app, async (input) => {
+                            await this.toggleTagInTask(taskFile.file, input);
+                        }).open();
+                    });
+            });
+            tagSubmenu.addSeparator();
+
+            if (this.allTaskTags.length === 0) {
+                tagSubmenu.addItem((subItem) => {
+                    subItem.setTitle("暂无可用标签").setDisabled(true);
+                });
+                return;
+            }
+
+            const currentTagsNorm = new Set(taskFile.tags.map(t => this.normalizeTagForCompare(t)));
+            const tree = this.buildTagTree(this.allTaskTags);
+            this.renderTagTreeMenu(tagSubmenu, tree, currentTagsNorm, 0, taskFile.file);
+        });
+
         menu.addSeparator();
 
         // 快速完成/取消完成
@@ -818,6 +937,124 @@ export class TaskResultView extends ItemView {
         });
 
         menu.showAtMouseEvent(event);
+    }
+
+    private renderTagTreeMenu(
+        menu: Menu,
+        node: TagTreeNode,
+        currentTagsNorm: Set<string>,
+        depth: number,
+        file: TFile
+    ): void {
+        const children = Array.from(node.children.values()).sort((a, b) =>
+            a.label.localeCompare(b.label, undefined, { sensitivity: "base" })
+        );
+
+        for (const child of children) {
+            const displayTag = `#${this.getNodePath(node, child)}`;
+            const isSelected = currentTagsNorm.has(this.normalizeTagForCompare(displayTag))
+                || (child.fullTag ? currentTagsNorm.has(this.normalizeTagForCompare(child.fullTag)) : false);
+
+            const hasChildren = child.children.size > 0;
+
+            if (hasChildren) {
+                // 有子级：创建更深层子菜单
+                menu.addItem((item) => {
+                    item.setTitle(isSelected ? `✓ ${displayTag}` : displayTag)
+                        .setIcon("tag");
+                    const sub = (item as any).setSubmenu() as Menu;
+
+                    // 如果该节点本身就是一个完整 tag（例如同时存在 #a 和 #a/b）
+                    if (child.fullTag) {
+                        const selfTag = child.fullTag;
+                        const selfSelected = currentTagsNorm.has(this.normalizeTagForCompare(selfTag));
+                        sub.addItem((subItem) => {
+                            subItem.setTitle(selfSelected ? `删除 ${selfTag}` : `添加 ${selfTag}`)
+                                .setIcon(selfSelected ? "trash" : "plus")
+                                .onClick(async () => {
+                                    await this.toggleTagInTask(file, selfTag);
+                                });
+                        });
+                        sub.addSeparator();
+                    }
+
+                    this.renderTagTreeMenu(sub, child, currentTagsNorm, depth + 1, file);
+                });
+            } else {
+                // 叶子：点击切换（添加/删除）
+                const leafTag = child.fullTag ?? displayTag;
+                const leafSelected = currentTagsNorm.has(this.normalizeTagForCompare(leafTag));
+                menu.addItem((item) => {
+                    item.setTitle(leafSelected ? `✓ ${leafTag}` : leafTag)
+                        .setIcon(leafSelected ? "trash" : "plus")
+                        .onClick(async () => {
+                            await this.toggleTagInTask(file, leafTag);
+                        });
+                });
+            }
+        }
+    }
+
+    private getNodePath(parent: TagTreeNode, child: TagTreeNode): string {
+        // 通过 fullTag 还原路径不可靠；这里按 label 递归拼接
+        // 由于渲染时只需要当前层级的 path，使用 parentLabelPath 缓存方式更复杂。
+        // 简化：根据 child.fullTag 或子树中任意 fullTag 推断。
+        const anyTag = child.fullTag ?? this.findAnyFullTag(child);
+        if (anyTag) {
+            const raw = anyTag.startsWith("#") ? anyTag.slice(1) : anyTag;
+            const parts = raw.split("/");
+            const idx = parts.findIndex(p => p === child.label);
+            if (idx >= 0) return parts.slice(0, idx + 1).join("/");
+        }
+        return child.label;
+    }
+
+    private findAnyFullTag(node: TagTreeNode): string | null {
+        if (node.fullTag) return node.fullTag;
+        for (const child of node.children.values()) {
+            const found = this.findAnyFullTag(child);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    private async toggleTagInTask(file: TFile, tagInput: string): Promise<void> {
+        try {
+            const cleaned = tagInput.trim();
+            if (!cleaned) return;
+
+            const tagName = cleaned.startsWith("#") ? cleaned.slice(1) : cleaned;
+            const tagNameLower = tagName.toLowerCase();
+
+            await this.app.fileManager.processFrontMatter(file, (fm) => {
+                const raw = (fm as any).tags;
+                const tags: string[] = Array.isArray(raw)
+                    ? raw.map((t: any) => String(t))
+                    : (typeof raw === "string" ? [raw] : []);
+
+                const norm = (t: string) => this.normalizeTagForCompare(t);
+                const normalized = tags.map(t => ({ raw: t, norm: norm(t) }));
+                const exists = normalized.some(t => t.norm === tagNameLower);
+
+                let next: string[];
+                if (exists) {
+                    next = normalized.filter(t => t.norm !== tagNameLower).map(t => t.raw);
+                } else {
+                    // 写入时使用不带 # 的形式（Obsidian frontmatter tags 习惯）
+                    next = [...tags, tagName];
+                }
+
+                if (next.length === 0) {
+                    delete (fm as any).tags;
+                } else {
+                    (fm as any).tags = next;
+                }
+            });
+
+            await this.refresh();
+        } catch (error) {
+            console.error("Failed to toggle tag:", error);
+        }
     }
 
     private async updateTaskField(file: TFile, field: string, value: string): Promise<void> {

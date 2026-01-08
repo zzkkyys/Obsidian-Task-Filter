@@ -1,4 +1,41 @@
-import { App, ItemView, WorkspaceLeaf, TFile, Menu, Modal, Setting } from "obsidian";
+import { App, ItemView, WorkspaceLeaf, TFile, Menu, Modal, Setting, Notice } from "obsidian";
+
+// 自定义通知，支持emoji和样式
+function showTaskNotice(msg: string, emoji: string) {
+    const n = new Notice("", 2200);
+    const el = (n as any).noticeEl as HTMLElement | undefined;
+    if (!el) {
+        new Notice(`${emoji} ${msg}`);
+        return;
+    }
+
+    el.classList.add("my-task-notice");
+    // 强制移除 Obsidian 默认背景
+    el.style.background = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+    el.style.border = "none";
+    el.style.boxShadow = "0 4px 15px rgba(102, 126, 234, 0.4)";
+    el.style.borderRadius = "10px";
+    el.style.color = "#fff";
+    el.style.fontWeight = "600";
+    el.style.padding = "12px 20px";
+
+    // 同时设置外层 .notice 父容器的背景为透明
+    const parentNotice = el.closest(".notice") as HTMLElement | null;
+    if (parentNotice) {
+        parentNotice.style.background = "transparent";
+        parentNotice.style.border = "none";
+        parentNotice.style.boxShadow = "none";
+        parentNotice.style.padding = "0";
+    }
+
+    while (el.firstChild) el.removeChild(el.firstChild);
+    const emojiEl = document.createElement("span");
+    emojiEl.className = "emoji";
+    emojiEl.textContent = emoji;
+    const textEl = document.createElement("span");
+    textEl.textContent = msg;
+    el.append(emojiEl, textEl);
+}
 // 简单金额输入模态框
 class MoneyInputModal extends Modal {
     onSubmit: (value: string) => void;
@@ -745,20 +782,52 @@ export class TaskResultView extends ItemView {
         try {
             const content = await this.app.vault.read(file);
             const newStatus = isDone ? "done" : "open";
-            
-            // 更新 frontmatter 中的 status
-            const updatedContent = content.replace(
+            let updatedContent = content.replace(
                 /^(---\s*\n[\s\S]*?)(status:\s*)([\w-]+)([\s\S]*?---)/m,
                 `$1$2${newStatus}$4`
             );
-            
+
+            // 处理 completedDate 字段
+            const dateStr = isDone ? this.getTodayStr() : null;
+            const completedDateRegex = /^(---\s*\n[\s\S]*?)(completedDate:\s*)([^\n]+)([\s\S]*?---)/m;
+            let noticeMsg = "";
+            let emoji = "";
+            if (isDone && dateStr) {
+                if (completedDateRegex.test(updatedContent)) {
+                    updatedContent = updatedContent.replace(completedDateRegex, `$1$2${dateStr}$4`);
+                    noticeMsg = `已更新 completedDate: ${dateStr}`;
+                    emoji = "✏️📅";
+                } else {
+                    const frontmatterEnd = updatedContent.indexOf("---", 4);
+                    if (frontmatterEnd !== -1) {
+                        updatedContent = updatedContent.slice(0, frontmatterEnd) + `completedDate: ${dateStr}\n` + updatedContent.slice(frontmatterEnd);
+                        noticeMsg = `已设置 completedDate: ${dateStr}`;
+                        emoji = "✅📅";
+                    }
+                }
+            } else {
+                if (/^completedDate:\s*[^\n]*\n?/m.test(updatedContent)) {
+                    updatedContent = updatedContent.replace(/^completedDate:\s*[^\n]*\n?/m, "");
+                    noticeMsg = "已移除 completedDate";
+                    emoji = "🗑️";
+                }
+            }
+
             await this.app.vault.modify(file, updatedContent);
-            
-            // 刷新视图
+            if (noticeMsg) showTaskNotice(noticeMsg, emoji);
             await this.refresh();
         } catch (error) {
             console.error("Failed to update task status:", error);
         }
+    }
+
+    // 获取今天日期字符串，格式为YYYY-MM-DD
+    private getTodayStr(): string {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = (now.getMonth() + 1).toString().padStart(2, "0");
+        const d = now.getDate().toString().padStart(2, "0");
+        return `${y}-${m}-${d}`;
     }
 
     private showTaskContextMenu(event: MouseEvent, taskFile: TaskFile): void {

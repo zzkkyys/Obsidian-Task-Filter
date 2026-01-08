@@ -1,3 +1,34 @@
+/* 自定义通知样式（仅本插件，基于 Obsidian Notice） */
+.my-task-notice {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+    padding: 12px 20px !important;
+    border: none !important;
+    outline: none !important;
+}
+
+/* 移除 Obsidian 默认通知的外层黑色背景 */
+.my-task-notice.notice {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+    filter: none !important;
+}
+
+.theme-dark .my-task-notice {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
+    box-shadow: 0 4px 15px rgba(245, 87, 108, 0.35) !important;
+}
+
+.my-task-notice .emoji {
+    font-size: 1.3em;
+    margin-right: 10px;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+}
 /* 金额标签 */
 .task-meta-money {
     background-color: rgba(234, 179, 8, 0.18);
@@ -160,12 +191,6 @@
     font-size: 13px;
 }
 
-/* 展开状态的父标签 */
-.tag-filter-item.has-children.is-expanded {
-    background-color: var(--background-secondary-alt);
-    font-weight: 600;
-}
-
 /* 有子标签的父标签样式 */
 .tag-filter-item.has-children {
     background-color: var(--background-primary-alt);
@@ -173,18 +198,13 @@
     border-radius: 12px;
 }
 
-/* 子标签样式（深度 > 0） */
+/* 层级标签样式（更紧凑） */
 .tag-filter-item.depth-1,
 .tag-filter-item.depth-2,
 .tag-filter-item.depth-3 {
-    font-size: 12px;
     padding: 3px 8px;
 }
 
-.tag-filter-item:hover {
-    background-color: var(--background-modifier-hover);
-    border-color: var(--background-modifier-border-hover);
-}
 
 .tag-filter-item.is-selected {
     background-color: var(--interactive-accent);

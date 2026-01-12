@@ -487,6 +487,9 @@ export class TaskResultView extends ItemView {
                 cls: "task-kanban-column-content",
             });
 
+            // 添加拖放功能
+            this.setupDropZone(columnContentEl, col.key, "status");
+
             if (tasks.length === 0) {
                 columnContentEl.createEl("p", {
                     text: "暂无任务",
@@ -576,6 +579,9 @@ export class TaskResultView extends ItemView {
                 cls: "task-kanban-column-content",
             });
 
+            // 添加拖放功能
+            this.setupDropZone(columnContentEl, project, "project");
+
             if (tasks.length === 0) {
                 columnContentEl.createEl("p", {
                     text: "暂无任务",
@@ -608,6 +614,19 @@ export class TaskResultView extends ItemView {
     private renderTaskCard(container: HTMLElement, taskFile: TaskFile, compact = false): void {
         const taskEl = container.createEl("div", {
             cls: `task-result-item task-status-${taskFile.status} task-priority-${taskFile.priority} ${compact ? "is-compact" : ""}`,
+        });
+
+        // 启用拖拽
+        taskEl.draggable = true;
+        taskEl.dataset.taskPath = taskFile.file.path;
+
+        taskEl.addEventListener("dragstart", (e) => {
+            e.dataTransfer?.setData("text/plain", taskFile.file.path);
+            taskEl.classList.add("is-dragging");
+        });
+
+        taskEl.addEventListener("dragend", () => {
+            taskEl.classList.remove("is-dragging");
         });
 
         // 右键菜单
@@ -1166,6 +1185,97 @@ export class TaskResultView extends ItemView {
             await this.refresh();
         } catch (error) {
             console.error(`Failed to remove task ${field}:`, error);
+        }
+    }
+
+    // 设置拖放区域
+    private setupDropZone(el: HTMLElement, targetValue: string, type: "status" | "project"): void {
+        el.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            el.classList.add("drag-over");
+        });
+
+        el.addEventListener("dragleave", (e) => {
+            // 只有真正离开元素时才移除样式
+            if (!el.contains(e.relatedTarget as Node)) {
+                el.classList.remove("drag-over");
+            }
+        });
+
+        el.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            el.classList.remove("drag-over");
+
+            const taskPath = e.dataTransfer?.getData("text/plain");
+            if (!taskPath) return;
+
+            const file = this.app.vault.getAbstractFileByPath(taskPath);
+            if (!(file instanceof TFile)) return;
+
+            if (type === "status") {
+                await this.updateTaskField(file, "status", targetValue);
+                showTaskNotice(`已移动到「${this.getStatusLabel(targetValue)}」`, "📦");
+            } else if (type === "project") {
+                await this.updateTaskProject(file, targetValue);
+                showTaskNotice(`已移动到项目「${targetValue}」`, "📁");
+            }
+        });
+    }
+
+    // 获取状态的显示标签
+    private getStatusLabel(status: string): string {
+        const col = STATUS_COLUMNS.find(c => c.key === status);
+        return col ? col.label : status;
+    }
+
+    // 更新任务所属项目（通过移动文件到对应的项目文件夹）
+    private async updateTaskProject(file: TFile, targetProject: string): Promise<void> {
+        try {
+            const currentPath = file.path;
+            const pathParts = currentPath.split("/");
+            
+            // 查找 Projects 文件夹的索引
+            const projectsIndex = pathParts.findIndex(part => part.toLowerCase() === "projects");
+            
+            if (projectsIndex === -1) {
+                // 文件不在 Projects 目录下，无法移动
+                showTaskNotice("该文件不在 Projects 目录下，无法移动", "⚠️");
+                return;
+            }
+
+            // 构建新路径
+            let newPath: string;
+            
+            if (targetProject === "未分类") {
+                // 移动到未分类 = 移动到 Projects 根目录
+                const beforeProjects = pathParts.slice(0, projectsIndex + 1); // 包括 "Projects"
+                const fileName = pathParts[pathParts.length - 1];
+                newPath = [...beforeProjects, fileName].join("/");
+            } else {
+                // 移动到目标项目文件夹
+                const beforeProjects = pathParts.slice(0, projectsIndex + 1); // 包括 "Projects"
+                const fileName = pathParts[pathParts.length - 1];
+                newPath = [...beforeProjects, targetProject, fileName].join("/");
+            }
+
+            // 如果路径相同，不需要移动
+            if (newPath === currentPath) {
+                return;
+            }
+
+            // 确保目标文件夹存在
+            const targetFolder = newPath.substring(0, newPath.lastIndexOf("/"));
+            const existingFolder = this.app.vault.getAbstractFileByPath(targetFolder);
+            if (!existingFolder) {
+                await this.app.vault.createFolder(targetFolder);
+            }
+
+            // 移动文件
+            await this.app.fileManager.renameFile(file, newPath);
+            await this.refresh();
+        } catch (error) {
+            console.error("Failed to move task to project:", error);
+            showTaskNotice("移动文件失败", "❌");
         }
     }
 }

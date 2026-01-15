@@ -15,6 +15,7 @@ export interface TaskFile {
     due: string | null;
     dateCreated: string | null;
     dateModified: string | null;
+    completedDate: string | null;
     projects: string[];
     money?: number; // 报销金额
 }
@@ -124,6 +125,7 @@ export async function getTaskFiles(app: App): Promise<TaskFile[]> {
                 due: fm.due || null,
                 dateCreated: fm.dateCreated || null,
                 dateModified: fm.dateModified || null,
+                completedDate: fm.completedDate || null,
                 projects,
                 money: typeof fm.money === "number" ? fm.money : (fm.money ? Number(fm.money) : undefined),
             });

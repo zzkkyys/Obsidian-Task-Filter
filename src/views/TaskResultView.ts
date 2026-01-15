@@ -682,14 +682,26 @@ export class TaskResultView extends ItemView {
         const priorityIcon = this.getPriorityIcon(taskFile.priority);
         priorityEl.createEl("span", { text: priorityIcon, cls: "task-meta-icon" });
 
-        // 到期时间
+        // 到期时间 / 完成时间
+        const isDone = this.normalizeStatus(taskFile.status) === "done";
+        
+        // 显示截止日期
         if (taskFile.due) {
-            const daysRemaining = this.getDaysRemaining(taskFile.due);
+            const daysRemaining = isDone ? null : this.getDaysRemaining(taskFile.due);
             const dueEl = metaEl.createEl("span", {
-                cls: `task-meta-item task-meta-due ${this.getDueClass(daysRemaining)}`,
+                cls: `task-meta-item task-meta-due ${isDone ? "" : this.getDueClass(daysRemaining)}`,
             });
             dueEl.createEl("span", { text: "📅 ", cls: "task-meta-icon" });
-            dueEl.createEl("span", { text: this.formatDueWithDays(taskFile.due, daysRemaining) });
+            dueEl.createEl("span", { text: isDone ? taskFile.due : this.formatDueWithDays(taskFile.due, daysRemaining) });
+        }
+
+        // 已完成任务显示完成时间
+        if (isDone && taskFile.completedDate) {
+            const completedEl = metaEl.createEl("span", {
+                cls: "task-meta-item task-meta-completed",
+            });
+            completedEl.createEl("span", { text: "✅ ", cls: "task-meta-icon" });
+            completedEl.createEl("span", { text: taskFile.completedDate });
         }
 
 

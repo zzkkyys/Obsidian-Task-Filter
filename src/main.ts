@@ -23,8 +23,9 @@ export default class TaskFilterPlugin extends Plugin {
         });
 
         // 添加功能区（ribbon）图标
-        const ribbonIconEl = this.addRibbonIcon("tags", "打开标签过滤器", () => {
-            this.activateTagFilterView();
+        const ribbonIconEl = this.addRibbonIcon("tags", "打开任务筛选面板", async () => {
+            await this.activateTagFilterView();
+            await this.activateTaskResultView();
         });
         ribbonIconEl.addClass("task-filter-ribbon-icon");
 

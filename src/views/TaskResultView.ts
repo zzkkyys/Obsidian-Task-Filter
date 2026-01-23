@@ -116,10 +116,10 @@ type TagTreeNode = {
 
 // 状态列定义
 const STATUS_COLUMNS = [
-    { key: "none", label: "未设置", icon: "⬜" },
     { key: "open", label: "Open", icon: "📋" },
     { key: "in-progress", label: "In Progress", icon: "🔄" },
     { key: "done", label: "Done", icon: "✅" },
+    { key: "none", label: "未设置", icon: "⬜" },
 ];
 
 // 优先级权重（用于排序）

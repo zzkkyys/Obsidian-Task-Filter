@@ -61,7 +61,33 @@ Quick starting guide for new plugin devs:
 - Together with a custom eslint [plugin](https://github.com/eslint-plugin) for Obsidan specific code guidelines.
 - A GitHub action is preconfigured to automatically lint every commit on all branches.
 
+## Key Features
+
+1. **Tag Filter**: Use the ribbon icon or command to open the Tag Filter View.
+2. **Task Board**: View tasks in List, Kanban, or Project modes.
+3. **Daily Summary**: Use the `ob-task` code block.
+
+## How to use `ob-task` Code Block
+
+You can add a summary of created and completed tasks for a specific date using the `ob-task` code block:
+
+```markdown
+```ob-task
+date: 2026-01-23
+```
+```
+
+- **date**: (Optional) Single date (YYYY-MM-DD). Defaults to Today if no date/range is specified.
+- **startDate** & **endDate**: (Optional) Filter by date range (inclusive).
+    - Example:
+      ```
+      startDate: 2026-01-01
+      endDate: 2026-01-31
+      ```
+- **Display**: Shows two lists: "Created Tasks" and "Completed Tasks".
+
 ## Funding URL
+
 
 You can include funding URLs where people who use your plugin can financially support it.
 

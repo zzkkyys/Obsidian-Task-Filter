@@ -948,3 +948,97 @@
     background-color: #7c3aed;
     color: #ffffff;
 }
+
+/* ob-task code block styles */
+.ob-task-block {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 16px;
+    background-color: var(--background-primary);
+    margin-bottom: 8px;
+}
+
+.ob-task-header {
+    margin-top: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 12px;
+}
+
+.ob-task-section {
+    margin-bottom: 16px;
+}
+
+.ob-task-section:last-child {
+    margin-bottom: 0;
+}
+
+.ob-task-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-muted);
+}
+
+.ob-task-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.ob-task-item {
+    margin-bottom: 4px;
+}
+
+.ob-task-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 13px;
+    margin: 4px 0;
+}
+
+.ob-task-error {
+    color: var(--text-error);
+    border: 1px solid var(--text-error);
+    padding: 8px;
+    border-radius: 4px;
+    background-color: rgba(255, 0, 0, 0.1);
+}
+
+
+/* Time badge style */
+.ob-task-time-badge {
+    font-size: 11px;
+    color: var(--text-muted);
+    background-color: var(--background-modifier-hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+
+/* Reset list style for clean flex layout */
+.ob-task-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Flex layout for task item */
+.ob-task-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.ob-task-item:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+/* Push time badge to the right */
+.ob-task-time-badge {
+    margin-left: auto;
+    white-space: nowrap;
+}

@@ -2,6 +2,7 @@ import { Plugin, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings";
 import { TagFilterView, TAG_FILTER_VIEW_TYPE } from "./views/TagFilterView";
 import { TaskResultView, TASK_RESULT_VIEW_TYPE } from "./views/TaskResultView";
+import { TaskBlockRenderer } from "./views/TaskBlockRenderer";
 
 export default class TaskFilterPlugin extends Plugin {
     settings: MyPluginSettings;
@@ -78,6 +79,13 @@ export default class TaskFilterPlugin extends Plugin {
                 this.refreshViews();
             })
         );
+
+        // 注册 ob-task 代码块 processor
+        this.registerMarkdownCodeBlockProcessor("ob-task", (source, el, ctx) => {
+            const renderer = new TaskBlockRenderer(this.app, el, source, ctx);
+            // 异步渲染
+            ctx.addChild(renderer);
+        });
     }
 
     onunload() {

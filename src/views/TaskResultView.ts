@@ -179,12 +179,12 @@ export class TaskResultView extends ItemView {
 
         // 根据选中的标签进行过滤
         let filtered = filterTaskFilesByTags(allTaskFiles, this.selectedTags);
-        
+
         // 隐藏已完成任务
         if (this.hideDone) {
             filtered = filtered.filter(t => this.normalizeStatus(t.status) !== "done");
         }
-        
+
         // 今日视图：只显示今天到期的任务
         if (this.viewMode === "today") {
             const today = new Date();
@@ -196,7 +196,7 @@ export class TaskResultView extends ItemView {
                 return due.getTime() === today.getTime();
             });
         }
-        
+
         // 排序
         this.taskFiles = this.sortTasks(filtered);
         this.render();
@@ -464,7 +464,7 @@ export class TaskResultView extends ItemView {
         // 渲染每列
         for (const col of STATUS_COLUMNS) {
             const tasks = tasksByStatus.get(col.key) || [];
-            
+
             const columnEl = kanbanEl.createEl("div", {
                 cls: `task-kanban-column kanban-status-${col.key}`,
             });
@@ -684,7 +684,7 @@ export class TaskResultView extends ItemView {
 
         // 到期时间 / 完成时间
         const isDone = this.normalizeStatus(taskFile.status) === "done";
-        
+
         // 显示截止日期
         if (taskFile.due) {
             const daysRemaining = isDone ? null : this.getDaysRemaining(taskFile.due);
@@ -796,7 +796,7 @@ export class TaskResultView extends ItemView {
     private formatDueWithDays(dateStr: string, daysRemaining: number | null): string {
         const dateFormatted = this.formatDate(dateStr);
         if (daysRemaining === null) return dateFormatted;
-        
+
         if (daysRemaining < 0) {
             const overdueDays = Math.abs(daysRemaining);
             return `${dateFormatted} (已过期 ${overdueDays} 天)`;
@@ -819,7 +819,7 @@ export class TaskResultView extends ItemView {
             );
 
             // 处理 completedDate 字段
-            const dateStr = isDone ? this.getTodayStr() : null;
+            const dateStr = isDone ? this.getCurrentTimestamp() : null;
             const completedDateRegex = /^(---\s*\n[\s\S]*?)(completedDate:\s*)([^\n]+)([\s\S]*?---)/m;
             let noticeMsg = "";
             let emoji = "";
@@ -852,13 +852,16 @@ export class TaskResultView extends ItemView {
         }
     }
 
-    // 获取今天日期字符串，格式为YYYY-MM-DD
-    private getTodayStr(): string {
+    // 获取当前时间字符串，格式为YYYY-MM-DD HH:mm:ss
+    private getCurrentTimestamp(): string {
         const now = new Date();
         const y = now.getFullYear();
         const m = (now.getMonth() + 1).toString().padStart(2, "0");
         const d = now.getDate().toString().padStart(2, "0");
-        return `${y}-${m}-${d}`;
+        const h = now.getHours().toString().padStart(2, "0");
+        const min = now.getMinutes().toString().padStart(2, "0");
+        const s = now.getSeconds().toString().padStart(2, "0");
+        return `${y}-${m}-${d} ${h}:${min}:${s}`;
     }
 
     private showTaskContextMenu(event: MouseEvent, taskFile: TaskFile): void {
@@ -890,7 +893,7 @@ export class TaskResultView extends ItemView {
                 .setIcon("check-circle");
 
             const statusSubmenu = (item as any).setSubmenu() as Menu;
-            
+
             const statuses = [
                 { key: "open", label: "🔵 待办", icon: "circle" },
                 { key: "in-progress", label: "🟡 进行中", icon: "clock" },
@@ -1160,10 +1163,10 @@ export class TaskResultView extends ItemView {
     private async updateTaskField(file: TFile, field: string, value: string): Promise<void> {
         try {
             const content = await this.app.vault.read(file);
-            
+
             // 创建匹配该字段的正则表达式
             const fieldRegex = new RegExp(`^(---\\s*\\n[\\s\\S]*?)(${field}:\\s*)([^\\n]+)([\\s\\S]*?---)`, "m");
-            
+
             let updatedContent: string;
             if (fieldRegex.test(content)) {
                 // 字段存在，更新它
@@ -1177,7 +1180,7 @@ export class TaskResultView extends ItemView {
                     updatedContent = content;
                 }
             }
-            
+
             await this.app.vault.modify(file, updatedContent);
             await this.refresh();
         } catch (error) {
@@ -1188,11 +1191,11 @@ export class TaskResultView extends ItemView {
     private async removeTaskField(file: TFile, field: string): Promise<void> {
         try {
             const content = await this.app.vault.read(file);
-            
+
             // 移除该字段行
             const fieldRegex = new RegExp(`^${field}:\\s*[^\\n]*\\n?`, "gm");
             const updatedContent = content.replace(fieldRegex, "");
-            
+
             await this.app.vault.modify(file, updatedContent);
             await this.refresh();
         } catch (error) {
@@ -1245,10 +1248,10 @@ export class TaskResultView extends ItemView {
         try {
             const currentPath = file.path;
             const pathParts = currentPath.split("/");
-            
+
             // 查找 Projects 文件夹的索引
             const projectsIndex = pathParts.findIndex(part => part.toLowerCase() === "projects");
-            
+
             if (projectsIndex === -1) {
                 // 文件不在 Projects 目录下，无法移动
                 showTaskNotice("该文件不在 Projects 目录下，无法移动", "⚠️");
@@ -1257,7 +1260,7 @@ export class TaskResultView extends ItemView {
 
             // 构建新路径
             let newPath: string;
-            
+
             if (targetProject === "未分类") {
                 // 移动到未分类 = 移动到 Projects 根目录
                 const beforeProjects = pathParts.slice(0, projectsIndex + 1); // 包括 "Projects"

@@ -1059,3 +1059,107 @@
 .task-project-add-btn:hover {
     color: var(--text-normal);
 }
+
+
+/* ========== 专注视图 ========== */
+.task-focus-container {
+    margin-top: 20px;
+    padding: 16px;
+    background-color: var(--background-primary-alt);
+    border-top: 2px solid var(--interactive-accent);
+}
+
+.task-focus-title {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    color: var(--interactive-accent);
+}
+
+.task-focus-boards {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+}
+
+.task-focus-board {
+    flex: 0 0 300px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    max-height: 400px;
+}
+
+.task-focus-board-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--background-secondary-alt);
+    border-radius: 8px 8px 0 0;
+}
+
+.task-focus-board-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.task-focus-close-btn {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.task-focus-close-btn:hover {
+    color: var(--text-error);
+}
+
+.task-focus-board-content {
+    padding: 10px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.task-focus-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.task-focus-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.task-focus-item input[type='checkbox'] {
+    margin-top: 3px;
+}
+
+.task-focus-item span.is-done {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.task-focus-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    margin-top: 10px;
+}
+
+
+/* 子任务计数 */
+.task-subtask-count {
+    font-size: 10px;
+    color: var(--text-muted);
+    vertical-align: sub;
+    margin-left: 4px;
+    background-color: var(--background-modifier-hover);
+    padding: 1px 4px;
+    border-radius: 8px;
+}

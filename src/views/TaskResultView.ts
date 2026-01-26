@@ -178,7 +178,7 @@ import { getTaskFiles, filterTaskFilesByTags, TaskFile } from "../utils/tagScann
 
 export const TASK_RESULT_VIEW_TYPE = "task-result-view";
 
-type ViewMode = "list" | "kanban" | "project" | "today";
+type ViewMode = "list" | "kanban" | "project" | "today" | "focus";
 type SortMode = "due" | "priority" | "title" | "created";
 
 type TagTreeNode = {
@@ -212,6 +212,8 @@ export class TaskResultView extends ItemView {
     private viewMode: ViewMode = "list";
     private sortMode: SortMode = "due";
     private hideDone: boolean = false;
+    private focusedTasks: Set<string> = new Set();
+    private subtaskCache: Map<string, { content: string, line: number, status: string }[]> = new Map();
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskFilterPlugin) {
         super(leaf);
@@ -403,6 +405,16 @@ export class TaskResultView extends ItemView {
             this.refresh();
         });
 
+        const focusBtn = viewToggleEl.createEl("button", {
+            cls: `task-view-btn ${this.viewMode === "focus" ? "is-active" : ""}`,
+            attr: { "aria-label": "专注视图" },
+        });
+        focusBtn.innerHTML = "🔭";
+        focusBtn.addEventListener("click", () => {
+            this.viewMode = "focus";
+            this.refresh();
+        });
+
         const refreshBtn = headerEl.createEl("button", {
             cls: "task-result-refresh-btn",
             attr: { "aria-label": "刷新" },
@@ -489,12 +501,15 @@ export class TaskResultView extends ItemView {
         }
 
         // 根据视图模式渲染
+        // 根据视图模式渲染
         if (this.viewMode === "kanban") {
             this.renderKanbanView(mainContainer);
         } else if (this.viewMode === "project") {
             this.renderProjectView(mainContainer);
         } else if (this.viewMode === "today") {
             this.renderListView(mainContainer);
+        } else if (this.viewMode === "focus") {
+            this.renderFocusView(mainContainer);
         } else {
             this.renderListView(mainContainer);
         }
@@ -726,6 +741,25 @@ export class TaskResultView extends ItemView {
             this.showTaskContextMenu(e, taskFile);
         });
 
+        // 专注模式点击 (Ctrl/Cmd + Click)
+        taskEl.addEventListener("click", async (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const path = taskFile.file.path;
+                if (this.focusedTasks.has(path)) {
+                    this.focusedTasks.delete(path);
+                    showTaskNotice("已移出专注视图", "➖");
+                } else {
+                    this.focusedTasks.add(path);
+                    showTaskNotice("已加入专注视图", "🔭");
+                    await this.loadSubtasks(taskFile.file);
+                }
+                this.refresh();
+            }
+        });
+
         // 第一行：复选框 + 标题
         const headerEl = taskEl.createEl("div", {
             cls: "task-result-header-row",
@@ -750,6 +784,14 @@ export class TaskResultView extends ItemView {
             e.preventDefault();
             this.app.workspace.openLinkText(taskFile.file.path, "", false);
         });
+
+        // 子任务计数
+        if (taskFile.subtaskTotal > 0) {
+            headerEl.createEl("span", {
+                cls: "task-subtask-count",
+                text: `${taskFile.subtaskCompleted}/${taskFile.subtaskTotal}`,
+            });
+        }
 
         // 第二行：元数据（状态、优先级、到期时间）
         const metaEl = taskEl.createEl("div", {
@@ -1433,6 +1475,91 @@ dateCreated: ${formatTime(now)}
         } catch (error) {
             console.error("Failed to create new task:", error);
             showTaskNotice("创建任务失败", "❌");
+        }
+    }
+
+    // 加载子任务
+    private async loadSubtasks(file: TFile): Promise<void> {
+        const content = await this.app.vault.read(file);
+        const lines = content.split("\n");
+        const subtasks: { content: string, line: number, status: string }[] = [];
+
+        lines.forEach((line, index) => {
+            const match = line.match(/^(\s*)-\s\[([ xX])\]\s(.*)$/);
+            if (match) {
+                subtasks.push({
+                    status: (match[2] || " ").toLowerCase(),
+                    content: match[3] || "",
+                    line: index
+                });
+            }
+        });
+
+        this.subtaskCache.set(file.path, subtasks);
+    }
+
+    // 渲染专注视图
+    private renderFocusView(container: HTMLElement): void {
+        const focusContainer = container.createEl("div", {
+            cls: "task-focus-container",
+        });
+
+        focusContainer.createEl("h3", { text: "🔭 任务专注模式", cls: "task-focus-title" });
+
+        const boardContainer = focusContainer.createEl("div", {
+            cls: "task-focus-boards",
+        });
+
+        for (const path of this.focusedTasks) {
+            const file = this.app.vault.getAbstractFileByPath(path);
+            if (!(file instanceof TFile)) continue;
+
+            const subtasks = this.subtaskCache.get(path) || [];
+
+            const board = boardContainer.createEl("div", {
+                cls: "task-focus-board",
+            });
+
+            // 看板头部
+            const header = board.createEl("div", {
+                cls: "task-focus-board-header",
+            });
+
+            header.createEl("span", {
+                text: file.basename,
+                cls: "task-focus-board-name"
+            });
+
+            const closeBtn = header.createEl("div", {
+                cls: "task-focus-close-btn clickable-icon",
+                attr: { "aria-label": "关闭" }
+            });
+            setIcon(closeBtn, "cross");
+            closeBtn.addEventListener("click", () => {
+                this.focusedTasks.delete(path);
+                this.refresh();
+            });
+
+            // 看板内容 (子任务列表)
+            const content = board.createEl("div", {
+                cls: "task-focus-board-content",
+            });
+
+            if (subtasks.length === 0) {
+                content.createEl("div", { text: "无子任务", cls: "task-focus-empty" });
+            } else {
+                const ul = content.createEl("ul", { cls: "task-focus-list" });
+                for (const sub of subtasks) {
+                    const li = ul.createEl("li", { cls: "task-focus-item" });
+
+                    // 简单的 checkbox 显示 (暂不支持交互修改，因为行号可能变动，需更复杂逻辑)
+                    const checkbox = li.createEl("input", { type: "checkbox" });
+                    checkbox.checked = sub.status === "x";
+                    checkbox.disabled = true; // 只读
+
+                    li.createEl("span", { text: sub.content, cls: sub.status === "x" ? "is-done" : "" });
+                }
+            }
         }
     }
 }

@@ -18,6 +18,8 @@ export interface TaskFile {
     completedDate: string | null;
     projects: string[];
     money?: number; // 报销金额
+    subtaskTotal: number;
+    subtaskCompleted: number;
 }
 
 /**
@@ -56,9 +58,9 @@ export async function getAllTags(app: App): Promise<TagInfo[]> {
     }
 
     return Array.from(tagCounts.entries())
-        .map(([tagLower, count]) => ({ 
+        .map(([tagLower, count]) => ({
             tag: tagOriginalCase.get(tagLower) || tagLower,  // 使用原始大小写
-            count 
+            count
         }))
         .sort((a, b) => b.count - a.count);
 }
@@ -102,7 +104,7 @@ export async function getTaskFiles(app: App): Promise<TaskFile[]> {
             const fm = cache?.frontmatter || {};
             let projects = fm.projects ? (Array.isArray(fm.projects) ? fm.projects : [fm.projects]) : [];
             projects = projects.filter((p: string) => p && p.length > 0);
-            
+
             // 如果 frontmatter 中没有 projects，尝试从文件路径提取
             // 路径格式: xxxx/Projects/项目名/yyy.md -> projects = 项目名
             if (projects.length === 0) {
@@ -115,7 +117,22 @@ export async function getTaskFiles(app: App): Promise<TaskFile[]> {
                     }
                 }
             }
-            
+
+            // 计算子任务
+            let subtaskTotal = 0;
+            let subtaskCompleted = 0;
+
+            if (cache?.listItems) {
+                for (const item of cache.listItems) {
+                    if (item.task) { // 这是一个任务项
+                        subtaskTotal++;
+                        if (item.task !== ' ' && item.task !== '') {
+                            subtaskCompleted++;
+                        }
+                    }
+                }
+            }
+
             taskFiles.push({
                 file,
                 tags: [...new Set(fileTags)], // 去重
@@ -128,6 +145,8 @@ export async function getTaskFiles(app: App): Promise<TaskFile[]> {
                 completedDate: fm.completedDate || null,
                 projects,
                 money: typeof fm.money === "number" ? fm.money : (fm.money ? Number(fm.money) : undefined),
+                subtaskTotal,
+                subtaskCompleted
             });
         }
     }

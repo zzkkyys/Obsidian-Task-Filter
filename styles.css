@@ -1042,3 +1042,20 @@
     margin-left: auto;
     white-space: nowrap;
 }
+
+
+/* 项目视图列头右侧：按钮 + 计数 */
+.task-kanban-column-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.task-project-add-btn {
+    color: var(--text-muted);
+    transition: color 0.15s;
+}
+
+.task-project-add-btn:hover {
+    color: var(--text-normal);
+}

@@ -1,12 +1,14 @@
-import {App, PluginSettingTab, Setting} from "obsidian";
+import { App, PluginSettingTab, Setting } from "obsidian";
 import TaskFilterPlugin from "./main";
 
 export interface MyPluginSettings {
 	hiddenTags: string[];
+	projectPath: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
-	hiddenTags: ['#task']
+	hiddenTags: ['#task'],
+	projectPath: 'Projects'
 }
 
 export class SampleSettingTab extends PluginSettingTab {
@@ -18,7 +20,7 @@ export class SampleSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
@@ -36,6 +38,17 @@ export class SampleSettingTab extends PluginSettingTab {
 						.split('\n')
 						.map(tag => tag.trim().toLowerCase())
 						.filter(tag => tag.length > 0);
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('项目根目录')
+			.setDesc('所有项目文件夹所在的父目录（默认为 Projects）')
+			.addText(text => text
+				.setPlaceholder('Projects')
+				.setValue(this.plugin.settings.projectPath)
+				.onChange(async (value) => {
+					this.plugin.settings.projectPath = value.trim() || 'Projects';
 					await this.plugin.saveSettings();
 				}));
 	}

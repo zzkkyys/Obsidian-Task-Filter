@@ -1,4 +1,4 @@
-import { App, ItemView, WorkspaceLeaf, TFile, Menu, Modal, Setting, Notice } from "obsidian";
+import { App, ItemView, WorkspaceLeaf, TFile, Menu, Modal, Setting, Notice, setIcon } from "obsidian";
 
 // 自定义通知，支持emoji和样式
 function showTaskNotice(msg: string, emoji: string) {
@@ -98,6 +98,79 @@ class TagInputModal extends Modal {
             .addExtraButton(btn => btn.setIcon("cross").setTooltip("取消").onClick(() => this.close()));
 
         input.focus();
+    }
+}
+
+// 简单创建任务模态框
+class TaskCreateModal extends Modal {
+    onSubmit: (title: string, priority: string, scheduled: string, due: string) => void;
+    project: string;
+
+    constructor(app: App, project: string, onSubmit: (title: string, priority: string, scheduled: string, due: string) => void) {
+        super(app);
+        this.project = project;
+        this.onSubmit = onSubmit;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl("h3", { text: `在「${this.project}」中创建新任务` });
+
+        let title = "";
+        let priority = "normal";
+
+        // 标题输入
+        new Setting(contentEl)
+            .setName("任务标题")
+            .addText(text => text
+                .setPlaceholder("输入任务名称...")
+                .onChange(value => { title = value; }));
+
+        // 优先级选择
+        new Setting(contentEl)
+            .setName("优先级")
+            .addDropdown(drop => drop
+                .addOption("high", "🔴 高")
+                .addOption("medium", "🟡 中")
+                .addOption("low", "🟢 低")
+                .addOption("normal", "⚪ 普通")
+                .setValue("normal")
+                .onChange(value => { priority = value; }));
+
+        // 计划开始时间 (scheduled)
+        let scheduled = "";
+        new Setting(contentEl)
+            .setName("计划开始日期")
+            .addText(text => text
+                .setPlaceholder("YYYY-MM-DD")
+                .onChange(value => { scheduled = value; }));
+
+        // 截止时间 (due)
+        let due = "";
+        new Setting(contentEl)
+            .setName("截止日期")
+            .addText(text => text
+                .setPlaceholder("YYYY-MM-DD")
+                .onChange(value => { due = value; }));
+
+        // 按钮
+        new Setting(contentEl)
+            .addButton(btn => btn
+                .setButtonText("创建任务")
+                .setCta()
+                .onClick(() => {
+                    if (title.trim()) {
+                        this.close();
+                        this.onSubmit(title.trim(), priority, scheduled.trim(), due.trim());
+                    } else {
+                        new Notice("请输入任务标题");
+                    }
+                }))
+            .addExtraButton(btn => btn
+                .setIcon("cross")
+                .setTooltip("取消")
+                .onClick(() => this.close()));
     }
 }
 import type TaskFilterPlugin from "../main";
@@ -569,7 +642,25 @@ export class TaskResultView extends ItemView {
                 });
             }
 
-            columnHeaderEl.createEl("span", {
+            // 右侧容器：按钮 + 计数
+            const headerRightEl = columnHeaderEl.createEl("div", {
+                cls: "task-kanban-column-header-right",
+            });
+
+            // 新增：创建任务按钮 (使用 clickable-icon 样式更和谐)
+            const addBtn = headerRightEl.createEl("div", {
+                cls: "clickable-icon task-project-add-btn",
+                attr: { "aria-label": "新建任务", "title": "新建任务" },
+            });
+            setIcon(addBtn, "plus");
+            addBtn.addEventListener("click", (evt) => {
+                // 打开创建任务模态框
+                new TaskCreateModal(this.app, project, async (title, priority, scheduled, due) => {
+                    await this.createNewTask(project, title, priority, scheduled, due);
+                }).open();
+            });
+
+            headerRightEl.createEl("span", {
                 text: `(${tasks.length})`,
                 cls: "task-kanban-column-count",
             });
@@ -1247,31 +1338,22 @@ export class TaskResultView extends ItemView {
     private async updateTaskProject(file: TFile, targetProject: string): Promise<void> {
         try {
             const currentPath = file.path;
-            const pathParts = currentPath.split("/");
+            const rootPath = this.plugin.settings.projectPath || "Projects";
 
-            // 查找 Projects 文件夹的索引
-            const projectsIndex = pathParts.findIndex(part => part.toLowerCase() === "projects");
+            // 简单的路径替换逻辑
+            // 如果已经在项目目录下，替换项目名
+            // 如果不在，移动到项目目录
 
-            if (projectsIndex === -1) {
-                // 文件不在 Projects 目录下，无法移动
-                showTaskNotice("该文件不在 Projects 目录下，无法移动", "⚠️");
-                return;
-            }
-
-            // 构建新路径
             let newPath: string;
 
             if (targetProject === "未分类") {
-                // 移动到未分类 = 移动到 Projects 根目录
-                const beforeProjects = pathParts.slice(0, projectsIndex + 1); // 包括 "Projects"
-                const fileName = pathParts[pathParts.length - 1];
-                newPath = [...beforeProjects, fileName].join("/");
+                // 移动到根项目目录
+                newPath = `${rootPath}/${file.name}`;
             } else {
-                // 移动到目标项目文件夹
-                const beforeProjects = pathParts.slice(0, projectsIndex + 1); // 包括 "Projects"
-                const fileName = pathParts[pathParts.length - 1];
-                newPath = [...beforeProjects, targetProject, fileName].join("/");
+                newPath = `${rootPath}/${targetProject}/${file.name}`;
             }
+
+            // 确保目标文件夹存在
 
             // 如果路径相同，不需要移动
             if (newPath === currentPath) {
@@ -1291,6 +1373,66 @@ export class TaskResultView extends ItemView {
         } catch (error) {
             console.error("Failed to move task to project:", error);
             showTaskNotice("移动文件失败", "❌");
+        }
+    }
+
+    // 创建新任务
+    private async createNewTask(project: string, title: string, priority: string, scheduled: string, due: string): Promise<void> {
+        try {
+            // 确定文件路径
+            const rootPath = this.plugin.settings.projectPath || "Projects";
+            let folderPath = rootPath; // 默认根目录
+            if (project !== "未分类") {
+                folderPath = `${rootPath}/${project}`;
+            }
+
+            // 确保文件夹存在
+            if (!await this.app.vault.adapter.exists(folderPath)) {
+                await this.app.vault.createFolder(folderPath);
+            }
+
+            // 文件名处理 (简单处理非法字符)
+            const safeTitle = title.replace(/[\\/:*?"<>|]/g, "_");
+            let filePath = `${folderPath}/${safeTitle}.md`;
+
+            // 避免重名
+            let counter = 1;
+            while (await this.app.vault.adapter.exists(filePath)) {
+                filePath = `${folderPath}/${safeTitle} ${counter}.md`;
+                counter++;
+            }
+
+            // 模板内容
+            const now = new Date();
+            const formatTime = (d: Date) => {
+                const pad = (n: number) => n.toString().padStart(2, "0");
+                return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            };
+
+            const scheduledStr = `\nscheduled: ${scheduled || ""}`;
+            const dueStr = `\ndue: ${due || ""}`;
+
+            const content = `---
+tags:
+  - task
+status: open
+priority: ${priority}${scheduledStr}${dueStr}
+dateCreated: ${formatTime(now)}
+---
+# ${title}
+
+`;
+
+            const file = await this.app.vault.create(filePath, content);
+            showTaskNotice(`任务「${title}」已创建`, "✨");
+
+            // 刷新视图并打开文件
+            await this.refresh();
+            // Optional: open the new file
+            // await this.app.workspace.openLinkText(file.path, "", false);
+        } catch (error) {
+            console.error("Failed to create new task:", error);
+            showTaskNotice("创建任务失败", "❌");
         }
     }
 }

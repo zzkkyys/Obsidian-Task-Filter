@@ -20,6 +20,7 @@ export interface TaskFile {
     money?: number; // 报销金额
     subtaskTotal: number;
     subtaskCompleted: number;
+    completion?: number; // 完成百分比
 }
 
 /**
@@ -146,7 +147,8 @@ export async function getTaskFiles(app: App): Promise<TaskFile[]> {
                 projects,
                 money: typeof fm.money === "number" ? fm.money : (fm.money ? Number(fm.money) : undefined),
                 subtaskTotal,
-                subtaskCompleted
+                subtaskCompleted,
+                completion: typeof fm.completion === "number" ? fm.completion : undefined
             });
         }
     }

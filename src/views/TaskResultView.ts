@@ -722,6 +722,10 @@ export class TaskResultView extends ItemView {
             cls: `task-result-item task-status-${taskFile.status} task-priority-${taskFile.priority} ${compact ? "is-compact" : ""}`,
         });
 
+        if (this.normalizeStatus(taskFile.status) !== "done" && taskFile.completion !== undefined && taskFile.completion > 0) {
+            taskEl.style.backgroundImage = `linear-gradient(90deg, rgba(46, 204, 113, 0.2) ${taskFile.completion}%, transparent ${taskFile.completion}%)`;
+        }
+
         // 启用拖拽
         taskEl.draggable = true;
         taskEl.dataset.taskPath = taskFile.file.path;
@@ -792,6 +796,8 @@ export class TaskResultView extends ItemView {
                 text: `${taskFile.subtaskCompleted}/${taskFile.subtaskTotal}`,
             });
         }
+
+
 
         // 第二行：元数据（状态、优先级、到期时间）
         const metaEl = taskEl.createEl("div", {
@@ -977,6 +983,23 @@ export class TaskResultView extends ItemView {
                 }
             }
 
+            // 处理 completion 字段：完成时设为 100，取消完成时移除
+            const completionRegex = /^(---\s*\n[\s\S]*?)(completion:\s*)([^\n]+)([\s\S]*?---)/m;
+            if (isDone) {
+                if (completionRegex.test(updatedContent)) {
+                    updatedContent = updatedContent.replace(completionRegex, `$1$2100$4`);
+                } else {
+                    const frontmatterEnd = updatedContent.indexOf("---", 4);
+                    if (frontmatterEnd !== -1) {
+                        updatedContent = updatedContent.slice(0, frontmatterEnd) + `completion: 100\n` + updatedContent.slice(frontmatterEnd);
+                    }
+                }
+            } else {
+                if (/^completion:\s*[^\n]*\n?/m.test(updatedContent)) {
+                    updatedContent = updatedContent.replace(/^completion:\s*[^\n]*\n?/m, "");
+                }
+            }
+
             await this.app.vault.modify(file, updatedContent);
             if (noticeMsg) showTaskNotice(noticeMsg, emoji);
             await this.refresh();
@@ -1068,6 +1091,26 @@ export class TaskResultView extends ItemView {
             }
         });
 
+
+
+        // 完成度子菜单
+        if (this.normalizeStatus(taskFile.status) !== "done" && this.normalizeStatus(taskFile.status) !== "completed") {
+            menu.addItem((item) => {
+                item.setTitle("设置完成度")
+                    .setIcon("percent");
+
+                const completionSubmenu = (item as any).setSubmenu() as Menu;
+
+                for (let i = 0; i <= 100; i += 10) {
+                    completionSubmenu.addItem((subItem) => {
+                        subItem.setTitle(`${i}%`)
+                            .onClick(async () => {
+                                await this.updateTaskField(taskFile.file, "completion", i);
+                            });
+                    });
+                }
+            });
+        }
 
         // 设置到期时间（今天/明天/下周/清除）
         menu.addItem((item) => {
@@ -1293,7 +1336,8 @@ export class TaskResultView extends ItemView {
         }
     }
 
-    private async updateTaskField(file: TFile, field: string, value: string): Promise<void> {
+
+    private async updateTaskField(file: TFile, field: string, value: string | number): Promise<void> {
         try {
             const content = await this.app.vault.read(file);
 

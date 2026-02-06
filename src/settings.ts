@@ -4,6 +4,7 @@ import TaskFilterPlugin from "./main";
 export interface MyPluginSettings {
 	hiddenTags: string[];
 	pinnedProjects: string[];
+	forceSettingsSidebarIcon: boolean;
 	projectViewMasonry: boolean;
 	projectViewPinnedOnly: boolean;
 	projectViewMasonryMaxColumns: number;
@@ -14,6 +15,7 @@ export interface MyPluginSettings {
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	hiddenTags: ['#task'],
 	pinnedProjects: [],
+	forceSettingsSidebarIcon: true,
 	projectViewMasonry: true,
 	projectViewPinnedOnly: false,
 	projectViewMasonryMaxColumns: 4,
@@ -25,6 +27,7 @@ type SettingsPanelKey = 'tags' | 'project';
 
 export class SampleSettingTab extends PluginSettingTab {
 	plugin: TaskFilterPlugin;
+	icon = 'tags';
 
 	constructor(app: App, plugin: TaskFilterPlugin) {
 		super(app, plugin);
@@ -100,6 +103,17 @@ export class SampleSettingTab extends PluginSettingTab {
 
 	private renderTagPanel(containerEl: HTMLElement): void {
 		containerEl.createEl('h3', { text: '标签设置' });
+		new Setting(containerEl)
+			.setName('强制显示设置侧栏图标')
+			.setDesc('实验功能：强制显示该插件在设置侧栏中的图标')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.forceSettingsSidebarIcon)
+				.onChange(async (value) => {
+					this.plugin.settings.forceSettingsSidebarIcon = value;
+					await this.plugin.saveSettings();
+					this.plugin.notifySettingsSidebarIconMaybeChanged();
+				}));
+
 		new Setting(containerEl)
 			.setName('隐藏的标签')
 			.setDesc('在标签列表中隐藏这些标签（每行一个，包含 # 号）')

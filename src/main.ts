@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Plugin, WorkspaceLeaf, setIcon } from "obsidian";
 import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings";
 import { TagFilterView, TAG_FILTER_VIEW_TYPE } from "./views/TagFilterView";
 import { TaskResultView, TASK_RESULT_VIEW_TYPE } from "./views/TaskResultView";
@@ -7,9 +7,12 @@ import { TaskBlockRenderer } from "./views/TaskBlockRenderer";
 export default class TaskFilterPlugin extends Plugin {
     settings: MyPluginSettings;
     private taskResultView: TaskResultView | null = null;
+    private settingsSidebarObserver: MutationObserver | null = null;
+    private iconApplyRafId: number | null = null;
 
     async onload() {
         await this.loadSettings();
+        this.setupSettingsSidebarIconObserver();
 
         // 注册标签过滤视图
         this.registerView(TAG_FILTER_VIEW_TYPE, (leaf: WorkspaceLeaf) => {
@@ -73,6 +76,7 @@ export default class TaskFilterPlugin extends Plugin {
 
         // 添加设置选项卡
         this.addSettingTab(new SampleSettingTab(this.app, this));
+        this.scheduleApplySettingsSidebarIcon();
 
         // 监听元数据缓存更新，以便自动刷新标签
         this.registerEvent(
@@ -93,6 +97,15 @@ export default class TaskFilterPlugin extends Plugin {
         // 关闭所有相关视图
         this.app.workspace.detachLeavesOfType(TAG_FILTER_VIEW_TYPE);
         this.app.workspace.detachLeavesOfType(TASK_RESULT_VIEW_TYPE);
+
+        if (this.iconApplyRafId !== null) {
+            window.cancelAnimationFrame(this.iconApplyRafId);
+            this.iconApplyRafId = null;
+        }
+        if (this.settingsSidebarObserver) {
+            this.settingsSidebarObserver.disconnect();
+            this.settingsSidebarObserver = null;
+        }
     }
 
     async loadSettings() {
@@ -101,6 +114,89 @@ export default class TaskFilterPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+    }
+
+    notifySettingsSidebarIconMaybeChanged(): void {
+        this.scheduleApplySettingsSidebarIcon();
+    }
+
+    private setupSettingsSidebarIconObserver(): void {
+        if (this.settingsSidebarObserver) {
+            this.settingsSidebarObserver.disconnect();
+        }
+
+        this.settingsSidebarObserver = new MutationObserver(() => {
+            this.scheduleApplySettingsSidebarIcon();
+        });
+
+        this.settingsSidebarObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+        });
+    }
+
+    private scheduleApplySettingsSidebarIcon(): void {
+        if (this.iconApplyRafId !== null) return;
+        this.iconApplyRafId = window.requestAnimationFrame(() => {
+            this.iconApplyRafId = null;
+            this.applySettingsSidebarIconVisibility();
+        });
+    }
+
+    private applySettingsSidebarIconVisibility(): void {
+        const settingId = this.manifest.id;
+        if (!settingId) return;
+
+        const navItem = document.querySelector(`.vertical-tab-nav-item[data-setting-id="${settingId}"]`) as HTMLElement | null;
+        if (!navItem) return;
+
+        const iconEl = navItem.querySelector(".vertical-tab-nav-item-icon") as HTMLElement | null;
+        if (!iconEl) return;
+
+        if (this.settings.forceSettingsSidebarIcon) {
+            const hasCustomIcon = iconEl.querySelector(".task-filter-settings-icon-svg") !== null;
+            navItem.classList.add("task-filter-force-settings-icon");
+            iconEl.style.setProperty("display", "flex", "important");
+            iconEl.style.setProperty("align-items", "center", "important");
+            iconEl.style.setProperty("justify-content", "flex-start", "important");
+            iconEl.style.setProperty("visibility", "visible", "important");
+            iconEl.style.setProperty("opacity", "1", "important");
+            iconEl.style.setProperty("width", "18px", "important");
+            iconEl.style.setProperty("min-width", "18px", "important");
+            iconEl.style.setProperty("margin-right", "4px", "important");
+            iconEl.style.setProperty("overflow", "visible", "important");
+            navItem.style.setProperty("padding-left", "8px", "important");
+
+            if (!hasCustomIcon) {
+                iconEl.empty();
+                iconEl.innerHTML = `
+                    <svg class="task-filter-settings-icon-svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M20.59 13.41 12 4.83V4H4v8h.83l8.58 8.59a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.82Z" fill="#22c55e"/>
+                        <path d="M7.5 7.5h.01" stroke="#0f172a" stroke-width="2.5" stroke-linecap="round"/>
+                        <circle cx="17.5" cy="17.5" r="4.25" fill="#f59e0b" stroke="#0f172a" stroke-width="1.25"/>
+                        <path d="M16.2 17.5h2.6" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M17.5 16.2v2.6" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                `;
+            }
+        } else {
+            navItem.classList.remove("task-filter-force-settings-icon");
+            iconEl.style.removeProperty("display");
+            iconEl.style.removeProperty("align-items");
+            iconEl.style.removeProperty("justify-content");
+            iconEl.style.removeProperty("visibility");
+            iconEl.style.removeProperty("opacity");
+            iconEl.style.removeProperty("width");
+            iconEl.style.removeProperty("min-width");
+            iconEl.style.removeProperty("margin-right");
+            iconEl.style.removeProperty("overflow");
+            navItem.style.removeProperty("padding-left");
+
+            if (iconEl.querySelector(".task-filter-settings-icon-svg")) {
+                iconEl.empty();
+                setIcon(iconEl, "tags");
+            }
+        }
     }
 
     /**

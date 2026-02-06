@@ -214,6 +214,10 @@ export class TaskResultView extends ItemView {
     private hideDone: boolean = false;
     private focusedTasks: Set<string> = new Set();
     private subtaskCache: Map<string, { content: string, line: number, status: string }[]> = new Map();
+    private resizeDebounceTimer: number | null = null;
+    private resizeListenerRegistered: boolean = false;
+    private projectFolderByName: Map<string, string> = new Map();
+    private inferredProjectRoot: string | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskFilterPlugin) {
         super(leaf);
@@ -233,11 +237,19 @@ export class TaskResultView extends ItemView {
     }
 
     async onOpen(): Promise<void> {
+        if (!this.resizeListenerRegistered) {
+            this.registerDomEvent(window, "resize", this.handleWindowResize);
+            this.resizeListenerRegistered = true;
+        }
         await this.refresh();
     }
 
     async onClose(): Promise<void> {
-        // 清理工作
+        if (this.resizeDebounceTimer !== null) {
+            window.clearTimeout(this.resizeDebounceTimer);
+            this.resizeDebounceTimer = null;
+        }
+        this.resizeListenerRegistered = false;
     }
 
     async setSelectedTags(tags: string[]): Promise<void> {
@@ -275,6 +287,210 @@ export class TaskResultView extends ItemView {
         // 排序
         this.taskFiles = this.sortTasks(filtered);
         this.render();
+    }
+
+    private getPinnedProjects(): Set<string> {
+        return new Set(
+            (this.plugin.settings.pinnedProjects ?? [])
+                .map(project => project.trim())
+                .filter(project => project.length > 0)
+        );
+    }
+
+    private async toggleProjectPinned(project: string): Promise<void> {
+        try {
+            const pinned = this.getPinnedProjects();
+            if (pinned.has(project)) {
+                pinned.delete(project);
+            } else {
+                pinned.add(project);
+            }
+            this.plugin.settings.pinnedProjects = Array.from(pinned).sort((a, b) => a.localeCompare(b, "zh-CN"));
+            await this.plugin.saveSettings();
+        } catch (error) {
+            console.error("Failed to update pinned projects:", error);
+            new Notice("保存固定项目失败");
+        }
+    }
+
+    private saveProjectViewPreference(key: "projectViewMasonry" | "projectViewPinnedOnly", value: boolean): void {
+        this.plugin.settings[key] = value;
+        this.plugin.saveSettings().catch(error => {
+            console.error("Failed to save project view preference:", error);
+            new Notice("保存项目视图设置失败");
+        });
+    }
+
+    private handleWindowResize = (): void => {
+        if (this.resizeDebounceTimer !== null) {
+            window.clearTimeout(this.resizeDebounceTimer);
+        }
+        this.resizeDebounceTimer = window.setTimeout(() => {
+            this.resizeDebounceTimer = null;
+            if (this.viewMode === "project" && this.plugin.settings.projectViewMasonry) {
+                this.render();
+            }
+        }, 120);
+    };
+
+    private renderProjectPinButtonIcon(buttonEl: HTMLButtonElement, pinned: boolean): void {
+        buttonEl.empty();
+        setIcon(buttonEl, "pin");
+
+        const svg = buttonEl.querySelector("svg");
+        if (svg) {
+            const icon = svg as SVGElement;
+            icon.style.width = "13px";
+            icon.style.height = "13px";
+            icon.style.transform = pinned ? "rotate(-24deg)" : "rotate(-44deg)";
+            icon.style.opacity = pinned ? "1" : "0.8";
+            return;
+        }
+
+        // Fallback: 如果 icon id 不可用，退回 emoji 显示
+        buttonEl.setText(pinned ? "📌" : "📍");
+        buttonEl.style.fontSize = "12px";
+    }
+
+    private styleProjectPinButton(buttonEl: HTMLButtonElement, pinned: boolean): void {
+        buttonEl.style.borderRadius = "8px";
+        buttonEl.style.width = "24px";
+        buttonEl.style.height = "24px";
+        buttonEl.style.display = "inline-flex";
+        buttonEl.style.alignItems = "center";
+        buttonEl.style.justifyContent = "center";
+        buttonEl.style.cursor = "pointer";
+        buttonEl.style.padding = "0";
+        buttonEl.style.transition = "background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease";
+
+        const applyVisual = (hover: boolean): void => {
+            if (pinned) {
+                buttonEl.style.color = "var(--text-on-accent)";
+                buttonEl.style.backgroundColor = hover ? "var(--interactive-accent-hover)" : "var(--interactive-accent)";
+                buttonEl.style.border = "1px solid var(--interactive-accent)";
+                buttonEl.style.boxShadow = "0 1px 4px rgba(0, 0, 0, 0.18)";
+            } else {
+                buttonEl.style.color = hover ? "var(--text-normal)" : "var(--text-muted)";
+                buttonEl.style.backgroundColor = hover ? "var(--background-modifier-hover)" : "var(--background-primary)";
+                buttonEl.style.border = "1px solid var(--background-modifier-border)";
+                buttonEl.style.boxShadow = "none";
+            }
+        };
+
+        applyVisual(false);
+        buttonEl.addEventListener("mouseenter", () => applyVisual(true));
+        buttonEl.addEventListener("mouseleave", () => applyVisual(false));
+    }
+
+    private getProjectMasonryMaxColumns(): number {
+        const raw = this.plugin.settings.projectViewMasonryMaxColumns;
+        if (typeof raw !== "number" || !Number.isFinite(raw)) return 4;
+        return Math.min(8, Math.max(1, Math.round(raw)));
+    }
+
+    private getProjectMasonryColumnWidthRange(): { min: number; max: number } {
+        const minRaw = this.plugin.settings.projectViewMasonryMinColumnWidth;
+        const maxRaw = this.plugin.settings.projectViewMasonryMaxColumnWidth;
+
+        const min = (typeof minRaw === "number" && Number.isFinite(minRaw))
+            ? Math.min(360, Math.max(160, Math.round(minRaw)))
+            : 220;
+        let max = (typeof maxRaw === "number" && Number.isFinite(maxRaw))
+            ? Math.min(520, Math.max(220, Math.round(maxRaw)))
+            : 340;
+
+        if (max < min) max = min;
+        return { min, max };
+    }
+
+    private getParentFolder(path: string): string {
+        const idx = path.lastIndexOf("/");
+        if (idx === -1) return "";
+        return path.slice(0, idx);
+    }
+
+    private joinPath(...parts: string[]): string {
+        return parts
+            .map(part => part.trim().replace(/^\/+|\/+$/g, ""))
+            .filter(part => part.length > 0)
+            .join("/");
+    }
+
+    private async ensureFolderExists(folderPath: string): Promise<void> {
+        const normalized = folderPath.trim().replace(/^\/+|\/+$/g, "");
+        if (!normalized) return;
+
+        const segments = normalized.split("/").filter(Boolean);
+        let current = "";
+        for (const segment of segments) {
+            current = current ? `${current}/${segment}` : segment;
+            if (!this.app.vault.getAbstractFileByPath(current)) {
+                await this.app.vault.createFolder(current);
+            }
+        }
+    }
+
+    private rebuildProjectFolderMappings(tasksByProject: Map<string, TaskFile[]>): void {
+        this.projectFolderByName.clear();
+        const rootCount = new Map<string, number>();
+
+        for (const [project, tasks] of tasksByProject.entries()) {
+            if (project === "未分类" || tasks.length === 0) continue;
+
+            const folderCount = new Map<string, number>();
+            for (const task of tasks) {
+                const parentFolder = this.getParentFolder(task.file.path);
+                if (!parentFolder) continue;
+                folderCount.set(parentFolder, (folderCount.get(parentFolder) ?? 0) + 1);
+            }
+
+            const bestFolder = Array.from(folderCount.entries())
+                .sort((a, b) => b[1] - a[1])[0]?.[0];
+            if (!bestFolder) continue;
+
+            this.projectFolderByName.set(project, bestFolder);
+            const rootFolder = this.getParentFolder(bestFolder);
+            if (rootFolder) {
+                rootCount.set(rootFolder, (rootCount.get(rootFolder) ?? 0) + 1);
+            }
+        }
+
+        const inferredRoot = Array.from(rootCount.entries())
+            .sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+        if (inferredRoot) {
+            this.inferredProjectRoot = inferredRoot;
+            return;
+        }
+
+        const unclassifiedTasks = tasksByProject.get("未分类") ?? [];
+        const unclassifiedFolder = unclassifiedTasks
+            .map(task => this.getParentFolder(task.file.path))
+            .find(folder => folder.length > 0);
+        this.inferredProjectRoot = unclassifiedFolder ?? this.inferredProjectRoot;
+    }
+
+    private resolveProjectFolderPath(project: string, sourceFile?: TFile): string {
+        if (project === "未分类") {
+            if (this.inferredProjectRoot) return this.inferredProjectRoot;
+            if (!sourceFile) return "";
+            const sourceParent = this.getParentFolder(sourceFile.path);
+            return this.getParentFolder(sourceParent);
+        }
+
+        const knownFolder = this.projectFolderByName.get(project);
+        if (knownFolder) return knownFolder;
+
+        if (this.inferredProjectRoot) {
+            return this.joinPath(this.inferredProjectRoot, project);
+        }
+
+        if (sourceFile) {
+            const sourceParent = this.getParentFolder(sourceFile.path);
+            const sourceRoot = this.getParentFolder(sourceParent);
+            if (sourceRoot) return this.joinPath(sourceRoot, project);
+        }
+
+        return this.joinPath(project);
     }
 
     private collectAllTaskTags(taskFiles: TaskFile[]): string[] {
@@ -454,6 +670,44 @@ export class TaskResultView extends ItemView {
             this.hideDone = hideCheckbox.checked;
             this.refresh();
         });
+
+        if (this.viewMode === "project") {
+            const projectOptionsEl = toolbarEl.createEl("div", {
+                cls: "task-toolbar-item task-project-view-options",
+            });
+            projectOptionsEl.style.marginLeft = "auto";
+            projectOptionsEl.style.gap = "12px";
+
+            const masonryLabel = projectOptionsEl.createEl("label", {
+                cls: "task-toolbar-mini-checkbox",
+            });
+            masonryLabel.style.display = "inline-flex";
+            masonryLabel.style.alignItems = "center";
+            masonryLabel.style.gap = "4px";
+            masonryLabel.style.cursor = "pointer";
+            const masonryCheckbox = masonryLabel.createEl("input", { type: "checkbox" });
+            masonryCheckbox.checked = this.plugin.settings.projectViewMasonry;
+            masonryCheckbox.addEventListener("change", () => {
+                this.saveProjectViewPreference("projectViewMasonry", masonryCheckbox.checked);
+                this.render();
+            });
+            masonryLabel.createEl("span", { text: "瀑布流" });
+
+            const pinnedOnlyLabel = projectOptionsEl.createEl("label", {
+                cls: "task-toolbar-mini-checkbox",
+            });
+            pinnedOnlyLabel.style.display = "inline-flex";
+            pinnedOnlyLabel.style.alignItems = "center";
+            pinnedOnlyLabel.style.gap = "4px";
+            pinnedOnlyLabel.style.cursor = "pointer";
+            const pinnedOnlyCheckbox = pinnedOnlyLabel.createEl("input", { type: "checkbox" });
+            pinnedOnlyCheckbox.checked = this.plugin.settings.projectViewPinnedOnly;
+            pinnedOnlyCheckbox.addEventListener("change", () => {
+                this.saveProjectViewPreference("projectViewPinnedOnly", pinnedOnlyCheckbox.checked);
+                this.refresh();
+            });
+            pinnedOnlyLabel.createEl("span", { text: "仅固定项目" });
+        }
         hideEl.createEl("span", { text: "隐藏已完成" });
 
         // 筛选信息
@@ -486,6 +740,19 @@ export class TaskResultView extends ItemView {
         statsEl.createEl("span", {
             text: `找到 ${this.taskFiles.length} 个任务文件`,
         });
+
+        if (this.viewMode === "project") {
+            const pinnedCount = this.getPinnedProjects().size;
+            if (pinnedCount > 0) {
+                const pinnedHint = statsEl.createEl("span", {
+                    cls: "task-project-pinned-hint",
+                    text: `📌 固定项目 ${pinnedCount} 个`,
+                });
+                pinnedHint.style.marginLeft = "8px";
+                pinnedHint.style.fontSize = "12px";
+                pinnedHint.style.color = "var(--text-accent)";
+            }
+        }
 
         // 列表/看板视图：显示未完成任务的金额汇总
         if (this.viewMode === "list" || this.viewMode === "kanban") {
@@ -592,9 +859,23 @@ export class TaskResultView extends ItemView {
     }
 
     private renderProjectView(mainContainer: HTMLElement): void {
+        const isMasonry = this.plugin.settings.projectViewMasonry;
+        const pinnedOnly = this.plugin.settings.projectViewPinnedOnly;
+        const pinnedProjects = this.getPinnedProjects();
+        const maxColumns = this.getProjectMasonryMaxColumns();
+        const columnWidthRange = this.getProjectMasonryColumnWidthRange();
+
         const kanbanEl = mainContainer.createEl("div", {
-            cls: "task-kanban task-project-kanban",
+            cls: `task-kanban task-project-kanban ${isMasonry ? "is-masonry" : ""}`,
         });
+        if (isMasonry) {
+            kanbanEl.style.display = "flex";
+            kanbanEl.style.flexDirection = "column";
+            kanbanEl.style.gap = "16px";
+            kanbanEl.style.overflowX = "visible";
+            kanbanEl.style.overflowY = "visible";
+            kanbanEl.style.maxHeight = "none";
+        }
 
         // 按项目分组
         const tasksByProject = new Map<string, TaskFile[]>();
@@ -613,27 +894,102 @@ export class TaskResultView extends ItemView {
             }
         }
 
-        // 对项目名排序（未分类放最后）
+        // 根据当前看板数据推断每个项目对应的实际文件夹路径
+        this.rebuildProjectFolderMappings(tasksByProject);
+
+        // 对项目名排序（固定项目优先，未分类放最后）
         const sortedProjects = Array.from(tasksByProject.keys()).sort((a, b) => {
+            const aPinned = pinnedProjects.has(a);
+            const bPinned = pinnedProjects.has(b);
+            if (aPinned !== bPinned) return aPinned ? -1 : 1;
             if (a === "未分类") return 1;
             if (b === "未分类") return -1;
-            return a.localeCompare(b);
+            return a.localeCompare(b, "zh-CN");
         });
 
+        const projectsToRender = pinnedOnly
+            ? sortedProjects.filter(project => pinnedProjects.has(project))
+            : sortedProjects;
+
+        const visibleProjectsToRender = projectsToRender.filter(project => {
+            const tasks = tasksByProject.get(project);
+            if (!tasks) return false;
+            return !(project === "未分类" && tasks.length === 0);
+        });
+
+        const pinnedProjectsToRender = visibleProjectsToRender.filter(project => pinnedProjects.has(project));
+        const normalProjectsToRender = visibleProjectsToRender.filter(project => !pinnedProjects.has(project));
+
+        let masonryColumnEls: HTMLElement[] = [];
+        let masonryColumnHeights: number[] = [];
+        if (isMasonry) {
+            const minColumnWidth = columnWidthRange.min;
+            const maxColumnWidth = columnWidthRange.max;
+            const columnGap = 16;
+            // 用实际瀑布流容器宽度计算列数，避免把外层 padding 算进去导致“只显示半列”
+            const measuredWidth = Math.floor(kanbanEl.getBoundingClientRect().width) || kanbanEl.clientWidth;
+            const availableWidth = Math.max(minColumnWidth, measuredWidth);
+            const maxColumnsByMinWidth = Math.max(1, Math.floor((availableWidth + columnGap) / (minColumnWidth + columnGap)));
+            const minColumnsByMaxWidth = Math.max(1, Math.ceil((availableWidth + columnGap) / (maxColumnWidth + columnGap)));
+            const widthBasedColumnCount = Math.max(minColumnsByMaxWidth, Math.min(maxColumns, maxColumnsByMinWidth));
+            const visibleProjectCount = Math.max(1, visibleProjectsToRender.length);
+            const columnCount = Math.max(1, Math.min(widthBasedColumnCount, visibleProjectCount));
+            const computedWidth = Math.floor((availableWidth - (columnCount - 1) * columnGap) / columnCount);
+            const targetColumnWidth = Math.min(maxColumnWidth, Math.max(minColumnWidth, computedWidth));
+
+            const masonryColumnsEl = kanbanEl.createEl("div", { cls: "task-project-masonry-columns" });
+            masonryColumnsEl.style.display = "flex";
+            masonryColumnsEl.style.alignItems = "flex-start";
+            masonryColumnsEl.style.justifyContent = "flex-start";
+            masonryColumnsEl.style.gap = `${columnGap}px`;
+            masonryColumnsEl.style.width = "100%";
+
+            masonryColumnEls = Array.from({ length: columnCount }, () => {
+                const colEl = masonryColumnsEl.createEl("div", { cls: "task-project-masonry-column" });
+                colEl.style.display = "flex";
+                colEl.style.flexDirection = "column";
+                colEl.style.gap = `${columnGap}px`;
+                colEl.style.flex = `0 0 ${targetColumnWidth}px`;
+                colEl.style.width = `${targetColumnWidth}px`;
+                colEl.style.minWidth = `${minColumnWidth}px`;
+                colEl.style.maxWidth = `${maxColumnWidth}px`;
+                return colEl;
+            });
+            masonryColumnHeights = new Array(columnCount).fill(0);
+        }
+
         // 渲染每个项目列
-        for (const project of sortedProjects) {
+        let renderedColumnCount = 0;
+
+        const renderProjectColumn = (project: string, containerEl: HTMLElement, renderMode: "normal" | "masonry"): void => {
             const tasks = tasksByProject.get(project)!;
             // 如果是未分类且没有任务，跳过
-            if (project === "未分类" && tasks.length === 0) continue;
+            if (project === "未分类" && tasks.length === 0) return;
+            renderedColumnCount++;
+
+            const isPinned = pinnedProjects.has(project);
 
             // 统计未完成任务的 money 总和
             const moneySum = tasks
                 .filter(t => this.normalizeStatus(t.status) !== "done" && typeof t.money === "number" && t.money > 0)
                 .reduce((sum, t) => sum + (t.money ?? 0), 0);
 
-            const columnEl = kanbanEl.createEl("div", {
-                cls: "task-kanban-column task-project-column",
+            const columnEl = containerEl.createEl("div", {
+                cls: `task-kanban-column task-project-column ${isPinned ? "is-pinned" : ""}`,
             });
+            if (renderMode === "masonry") {
+                columnEl.style.display = "flex";
+                // 取消 .task-kanban-column 的 flex-basis(280px)，避免在瀑布流列内被当成“固定高度”
+                columnEl.style.flex = "0 0 auto";
+                columnEl.style.minWidth = "0";
+                columnEl.style.width = "100%";
+                columnEl.style.height = "auto";
+                columnEl.style.maxHeight = "none";
+            }
+            if (isPinned) {
+                columnEl.style.border = "1px solid var(--interactive-accent)";
+                columnEl.style.boxShadow = "0 0 0 1px var(--interactive-accent-hover)";
+            }
 
             // 列头
             const columnHeaderEl = columnEl.createEl("div", {
@@ -662,6 +1018,22 @@ export class TaskResultView extends ItemView {
                 cls: "task-kanban-column-header-right",
             });
 
+            const pinBtn = headerRightEl.createEl("button", {
+                cls: `task-project-pin-btn ${isPinned ? "is-active" : ""}`,
+                attr: {
+                    type: "button",
+                    "aria-label": isPinned ? "取消固定项目" : "固定项目",
+                    title: isPinned ? "取消固定项目" : "固定项目",
+                },
+            });
+            this.renderProjectPinButtonIcon(pinBtn, isPinned);
+            this.styleProjectPinButton(pinBtn, isPinned);
+            pinBtn.addEventListener("click", async (evt) => {
+                evt.stopPropagation();
+                await this.toggleProjectPinned(project);
+                this.render();
+            });
+
             // 新增：创建任务按钮 (使用 clickable-icon 样式更和谐)
             const addBtn = headerRightEl.createEl("div", {
                 cls: "clickable-icon task-project-add-btn",
@@ -684,6 +1056,12 @@ export class TaskResultView extends ItemView {
             const columnContentEl = columnEl.createEl("div", {
                 cls: "task-kanban-column-content",
             });
+            if (renderMode !== "normal") {
+                // 取消 task-kanban-column-content 的 flex:1，避免卡片少时被拉伸
+                columnContentEl.style.flex = "0 0 auto";
+                columnContentEl.style.maxHeight = "none";
+                columnContentEl.style.overflowY = "visible";
+            }
 
             // 添加拖放功能
             this.setupDropZone(columnContentEl, project, "project");
@@ -698,12 +1076,60 @@ export class TaskResultView extends ItemView {
                     this.renderTaskCard(columnContentEl, taskFile, true);
                 }
             }
+        };
+
+        if (isMasonry) {
+            const getShortestColumnIndex = (): number => {
+                let minHeight = Number.POSITIVE_INFINITY;
+                let minIndex = 0;
+                for (let i = 0; i < masonryColumnHeights.length; i++) {
+                    const h = masonryColumnHeights[i] ?? 0;
+                    if (h < minHeight) {
+                        minHeight = h;
+                        minIndex = i;
+                    }
+                }
+                return minIndex;
+            };
+
+            const appendToColumn = (project: string, columnIndex: number): void => {
+                const columnEl = masonryColumnEls[columnIndex];
+                if (!columnEl) return;
+                renderProjectColumn(project, columnEl, "masonry");
+                masonryColumnHeights[columnIndex] = columnEl.offsetHeight;
+            };
+
+            if (pinnedOnly) {
+                // 仅固定项目模式：把当前可见项目全部重新做瀑布流分配，确保切换后发生重排
+                for (const project of visibleProjectsToRender) {
+                    const targetIndex = getShortestColumnIndex();
+                    appendToColumn(project, targetIndex);
+                }
+            } else {
+                // 固定项目优先放置到每列顶部（按列轮询）
+                for (let i = 0; i < pinnedProjectsToRender.length; i++) {
+                    const project = pinnedProjectsToRender[i];
+                    if (!project) continue;
+                    const targetIndex = i % masonryColumnEls.length;
+                    appendToColumn(project, targetIndex);
+                }
+
+                // 非固定项目继续接在同一组列中，追加到当前最短列
+                for (const project of normalProjectsToRender) {
+                    const targetIndex = getShortestColumnIndex();
+                    appendToColumn(project, targetIndex);
+                }
+            }
+        } else {
+            for (const project of projectsToRender) {
+                renderProjectColumn(project, kanbanEl, "normal");
+            }
         }
 
         // 如果没有任何项目
-        if (sortedProjects.length === 0 || (sortedProjects.length === 1 && sortedProjects[0] === "未分类" && tasksByProject.get("未分类")!.length === 0)) {
+        if (renderedColumnCount === 0) {
             kanbanEl.createEl("p", {
-                text: "没有找到任何项目",
+                text: pinnedOnly ? "暂无固定项目，请先点击项目列右上角📍进行固定" : "没有找到任何项目",
                 cls: "task-kanban-empty",
             });
         }
@@ -1424,22 +1850,8 @@ export class TaskResultView extends ItemView {
     private async updateTaskProject(file: TFile, targetProject: string): Promise<void> {
         try {
             const currentPath = file.path;
-            const rootPath = this.plugin.settings.projectPath || "Projects";
-
-            // 简单的路径替换逻辑
-            // 如果已经在项目目录下，替换项目名
-            // 如果不在，移动到项目目录
-
-            let newPath: string;
-
-            if (targetProject === "未分类") {
-                // 移动到根项目目录
-                newPath = `${rootPath}/${file.name}`;
-            } else {
-                newPath = `${rootPath}/${targetProject}/${file.name}`;
-            }
-
-            // 确保目标文件夹存在
+            const targetFolder = this.resolveProjectFolderPath(targetProject, file);
+            const newPath = this.joinPath(targetFolder, file.name) || file.name;
 
             // 如果路径相同，不需要移动
             if (newPath === currentPath) {
@@ -1447,11 +1859,8 @@ export class TaskResultView extends ItemView {
             }
 
             // 确保目标文件夹存在
-            const targetFolder = newPath.substring(0, newPath.lastIndexOf("/"));
-            const existingFolder = this.app.vault.getAbstractFileByPath(targetFolder);
-            if (!existingFolder) {
-                await this.app.vault.createFolder(targetFolder);
-            }
+            const parentFolder = this.getParentFolder(newPath);
+            await this.ensureFolderExists(parentFolder);
 
             // 移动文件
             await this.app.fileManager.renameFile(file, newPath);
@@ -1466,25 +1875,19 @@ export class TaskResultView extends ItemView {
     private async createNewTask(project: string, title: string, priority: string, scheduled: string, due: string): Promise<void> {
         try {
             // 确定文件路径
-            const rootPath = this.plugin.settings.projectPath || "Projects";
-            let folderPath = rootPath; // 默认根目录
-            if (project !== "未分类") {
-                folderPath = `${rootPath}/${project}`;
-            }
+            const folderPath = this.resolveProjectFolderPath(project);
 
             // 确保文件夹存在
-            if (!await this.app.vault.adapter.exists(folderPath)) {
-                await this.app.vault.createFolder(folderPath);
-            }
+            await this.ensureFolderExists(folderPath);
 
             // 文件名处理 (简单处理非法字符)
             const safeTitle = title.replace(/[\\/:*?"<>|]/g, "_");
-            let filePath = `${folderPath}/${safeTitle}.md`;
+            let filePath = this.joinPath(folderPath, `${safeTitle}.md`) || `${safeTitle}.md`;
 
             // 避免重名
             let counter = 1;
             while (await this.app.vault.adapter.exists(filePath)) {
-                filePath = `${folderPath}/${safeTitle} ${counter}.md`;
+                filePath = this.joinPath(folderPath, `${safeTitle} ${counter}.md`) || `${safeTitle} ${counter}.md`;
                 counter++;
             }
 

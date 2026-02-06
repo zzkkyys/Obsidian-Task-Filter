@@ -106,15 +106,13 @@ export async function getTaskFiles(app: App): Promise<TaskFile[]> {
             let projects = fm.projects ? (Array.isArray(fm.projects) ? fm.projects : [fm.projects]) : [];
             projects = projects.filter((p: string) => p && p.length > 0);
 
-            // 如果 frontmatter 中没有 projects，尝试从文件路径提取
-            // 路径格式: xxxx/Projects/项目名/yyy.md -> projects = 项目名
+            // 如果 frontmatter 中没有 projects，尝试从文件所在父目录提取
             if (projects.length === 0) {
                 const pathParts = file.path.split("/");
-                const projectsIndex = pathParts.findIndex(part => part.toLowerCase() === "projects");
-                if (projectsIndex !== -1 && projectsIndex < pathParts.length - 1) {
-                    const projectName = pathParts[projectsIndex + 1];
-                    if (projectName && projectName.length > 0 && !projectName.endsWith(".md")) {
-                        projects = [projectName];
+                if (pathParts.length >= 2) {
+                    const parentFolder = pathParts[pathParts.length - 2];
+                    if (parentFolder && parentFolder.length > 0) {
+                        projects = [parentFolder];
                     }
                 }
             }

@@ -211,7 +211,7 @@ export class TaskResultView extends ItemView {
     private allTaskTags: string[] = [];
     private viewMode: ViewMode = "list";
     private sortMode: SortMode = "due";
-    private hideDone: boolean = false;
+    private hideDone: boolean = true;
     private focusedTasks: Set<string> = new Set();
     private subtaskCache: Map<string, { content: string, line: number, status: string }[]> = new Map();
     private resizeDebounceTimer: number | null = null;

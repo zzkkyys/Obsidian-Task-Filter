@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings
 import { TagFilterView, TAG_FILTER_VIEW_TYPE } from "./views/TagFilterView";
 import { TaskResultView, TASK_RESULT_VIEW_TYPE } from "./views/TaskResultView";
 import { TaskBlockRenderer } from "./views/TaskBlockRenderer";
+import { copyTaskSkillToClipboard } from "./skills/taskSkill";
 
 export default class TaskFilterPlugin extends Plugin {
     settings: MyPluginSettings;
@@ -71,6 +72,15 @@ export default class TaskFilterPlugin extends Plugin {
             callback: async () => {
                 await this.activateTagFilterView();
                 await this.activateTaskResultView();
+            },
+        });
+
+        // 添加命令：复制 AI 任务生成 Skill 到剪贴板
+        this.addCommand({
+            id: "copy-task-skill-to-clipboard",
+            name: "复制 AI 任务生成 Skill 到剪贴板",
+            callback: () => {
+                copyTaskSkillToClipboard(this.app);
             },
         });
 

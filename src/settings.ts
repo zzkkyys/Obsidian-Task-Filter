@@ -11,6 +11,7 @@ export interface MyPluginSettings {
 	projectViewMasonryMinColumnWidth: number;
 	projectViewMasonryMaxColumnWidth: number;
 	mentionNotesFolder: string;
+	dayTimelineShowMemos: boolean;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	projectViewMasonryMinColumnWidth: 220,
 	projectViewMasonryMaxColumnWidth: 340,
 	mentionNotesFolder: '',
+	dayTimelineShowMemos: true,
 }
 
 type SettingsPanelKey = 'tags' | 'project';

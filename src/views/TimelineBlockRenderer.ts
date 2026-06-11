@@ -1,5 +1,6 @@
-import { App, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownRenderer, MarkdownView, moment } from "obsidian";
+import { App, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownRenderer, MarkdownView, TFile, moment } from "obsidian";
 import type { EditorView } from "@codemirror/view";
+import { MemoEntry, extractMemos } from "../utils/memoScanner";
 
 interface TimelineEntry {
     label: string;       // 左侧展示的日期或时间段
@@ -65,6 +66,7 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         const lines = this.source.split("\n");
         let mode: TimelineMode | null = null;
         let sortDesc = false;
+        let memosEnabled = false;
 
         // 先确定模式：显式 mode: 行优先，否则看首个条目头是否为时间段
         let firstHeadIndex = -1;
@@ -79,6 +81,11 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
             const sortMatch = line.match(/^sort\s*:\s*(asc|desc)$/i);
             if (sortMatch && sortMatch[1]) {
                 sortDesc = sortMatch[1].toLowerCase() === "desc";
+                continue;
+            }
+            const memosMatch = line.match(/^memos\s*:\s*(true|false|on|off|yes|no)$/i);
+            if (memosMatch && memosMatch[1]) {
+                memosEnabled = /^(true|on|yes)$/i.test(memosMatch[1]);
                 continue;
             }
             if (firstHeadIndex === -1 && (DATE_HEAD_RE.test(line) || DAY_HEAD_RE.test(line))) {
@@ -100,7 +107,7 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
             const rawLine = lines[i] || "";
             const line = rawLine.trim();
 
-            if (/^(mode\s*:\s*(date|day)|sort\s*:\s*(asc|desc))$/i.test(line) && !current) continue;
+            if (/^(mode\s*:\s*(date|day)|sort\s*:\s*(asc|desc)|memos\s*:\s*\w+)$/i.test(line) && !current) continue;
             if (line.startsWith("//")) continue;
 
             if (headRe.test(line)) {
@@ -129,13 +136,31 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
             }
         }
 
-        entries.sort((a, b) => sortDesc
+        // memos: true 时把同一篇笔记里的 ```memos 块合并进时间线（仅当天模式）
+        let memos: MemoEntry[] = [];
+        if (memosEnabled && mode === "day") {
+            const noteFile = this.app.vault.getAbstractFileByPath(this.ctx.sourcePath);
+            if (noteFile instanceof TFile) {
+                try {
+                    const noteContent = await this.app.vault.cachedRead(noteFile);
+                    memos = extractMemos(noteContent.split("\n"));
+                } catch {
+                    // 读取失败时忽略 memos
+                }
+            }
+        }
+
+        const renderItems: Array<{ sortKey: string; entry?: TimelineEntry; memo?: MemoEntry }> = [
+            ...entries.map(e => ({ sortKey: e.sortKey, entry: e })),
+            ...memos.map(m => ({ sortKey: String(m.timeSeconds).padStart(6, "0"), memo: m })),
+        ];
+        renderItems.sort((a, b) => sortDesc
             ? b.sortKey.localeCompare(a.sortKey)
             : a.sortKey.localeCompare(b.sortKey));
 
         const container = el.createEl("div", { cls: `ob-timeline ob-timeline-${mode}` });
 
-        if (entries.length === 0 && errors.length === 0) {
+        if (renderItems.length === 0 && errors.length === 0) {
             container.createEl("p", {
                 text: mode === "day"
                     ? "暂无条目。格式：09:00 - 10:30 | 标题 | 描述"
@@ -148,7 +173,13 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         // 当天模式：如果是今天的笔记，高亮正在进行的条目
         const nowSeconds = this.isTodayNote() ? this.currentSeconds() : null;
 
-        for (const entry of entries) {
+        for (const item of renderItems) {
+            if (item.memo) {
+                await this.renderMemoItem(container, item.memo);
+                continue;
+            }
+            const entry = item.entry;
+            if (!entry) continue;
             // 跨午夜条目：now 或 now+24h 落在区间内都算正在进行
             const isNow = mode === "day"
                 && nowSeconds !== null
@@ -297,24 +328,103 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         return segs.join("") || "";
     }
 
-    // 双击条目：定位到源码中该条目所在行并进入编辑
-    private async editEntry(entry: TimelineEntry, itemEl: HTMLElement): Promise<void> {
-        // 找到渲染此代码块的 markdown 视图，优先当前激活的视图
-        let targetView: MarkdownView | null = null;
+    // 渲染单条 memo（来自 Journal Memos 的 ```memos 块）
+    private async renderMemoItem(container: HTMLElement, memo: MemoEntry): Promise<void> {
+        const itemEl = container.createEl("div", { cls: "ob-timeline-item is-memo" });
+
+        itemEl.setAttribute("title", "双击在源码中定位此 memo");
+        itemEl.addEventListener("mousedown", (e) => {
+            if (e.detail >= 2) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+        itemEl.addEventListener("dblclick", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void this.focusFileLine(memo.line + 1);
+        });
+        let longPressTimer: number | null = null;
+        itemEl.addEventListener("touchstart", () => {
+            longPressTimer = window.setTimeout(() => {
+                longPressTimer = null;
+                void this.focusFileLine(memo.line + 1);
+            }, 550);
+        }, { passive: true });
+        const cancelLongPress = (): void => {
+            if (longPressTimer !== null) {
+                window.clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+        itemEl.addEventListener("touchend", cancelLongPress);
+        itemEl.addEventListener("touchmove", cancelLongPress, { passive: true });
+        itemEl.addEventListener("touchcancel", cancelLongPress);
+
+        const timeEl = itemEl.createEl("div", { cls: "ob-timeline-time" });
+        timeEl.createEl("span", { text: memo.label, cls: "ob-timeline-time-label" });
+        // eslint-disable-next-line obsidianmd/ui/sentence-case -- 小写 memo 为徽标样式
+        timeEl.createEl("span", { text: "memo", cls: "ob-timeline-memo-badge" });
+
+        const axisEl = itemEl.createEl("div", { cls: "ob-timeline-axis" });
+        axisEl.createEl("div", { cls: "ob-timeline-dot" });
+        axisEl.createEl("div", { cls: "ob-timeline-line" });
+
+        const cardEl = itemEl.createEl("div", { cls: "ob-timeline-card" });
+        if (memo.text) {
+            const contentEl = cardEl.createEl("div", { cls: "ob-timeline-memo-content" });
+            await MarkdownRenderer.render(this.app, memo.text, contentEl, this.ctx.sourcePath, this);
+        } else {
+            cardEl.createEl("div", { text: "（空 memo）", cls: "ob-timeline-desc" });
+        }
+    }
+
+    // 找到渲染此代码块的 markdown 视图，优先当前激活的视图
+    private findTargetView(): MarkdownView | null {
         const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (activeView?.file?.path === this.ctx.sourcePath) {
-            targetView = activeView;
-        } else {
-            for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
-                const view = leaf.view;
-                if (view instanceof MarkdownView && view.file?.path === this.ctx.sourcePath) {
-                    targetView = view;
-                    break;
-                }
+            return activeView;
+        }
+        for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+            const view = leaf.view;
+            if (view instanceof MarkdownView && view.file?.path === this.ctx.sourcePath) {
+                return view;
             }
         }
-        if (!targetView) return;
-        const view = targetView;
+        return null;
+    }
+
+    // 定位并选中文件中的某一行（用于 memo 跳转）
+    private async focusFileLine(line: number): Promise<void> {
+        const view = this.findTargetView();
+        if (!view) return;
+
+        let switchedMode = false;
+        if (view.getMode() === "preview") {
+            const leaf = view.leaf;
+            const state = leaf.getViewState();
+            (state.state as Record<string, unknown>).mode = "source";
+            await leaf.setViewState(state);
+            switchedMode = true;
+        }
+
+        window.setTimeout(() => {
+            const editor = view.editor;
+            const clamped = Math.max(0, Math.min(line, editor.lineCount() - 1));
+            const text = editor.getLine(clamped) ?? "";
+            editor.setSelection({ line: clamped, ch: 0 }, { line: clamped, ch: text.length });
+            editor.scrollIntoView(
+                { from: { line: clamped, ch: 0 }, to: { line: clamped, ch: text.length } },
+                true
+            );
+            editor.focus();
+        }, switchedMode ? 120 : 30);
+    }
+
+    // 双击条目：定位到源码中该条目所在行并进入编辑
+    private async editEntry(entry: TimelineEntry, itemEl: HTMLElement): Promise<void> {
+        const view = this.findTargetView();
+        if (!view) return;
 
         // 三层定位：getSectionInfo → CodeMirror posAtDOM → 按条目原文搜索
         let targetLine: number | null = null;

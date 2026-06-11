@@ -1,4 +1,8 @@
-import { App, Component, MarkdownRenderer, Notice, TFile, moment, normalizePath, setIcon, setTooltip } from "obsidian";
+import { App, Component, MarkdownRenderer, Notice, Scope, TFile, moment, normalizePath, setIcon, setTooltip } from "obsidian";
+import type TaskFilterPlugin from "../main";
+import { MentionIndex } from "../utils/mentionScanner";
+import { MemoEntry, extractMemos } from "../utils/memoScanner";
+import { attachMentionAutocomplete } from "../suggest/inputMentionSuggest";
 
 // 当天模式条目头：HH:mm[:ss] - HH:mm[:ss] |
 const DAY_HEAD_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*[-~—–]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*\|/;
@@ -41,8 +45,12 @@ interface EntryDraft {
  */
 export class DayTimelineSection {
     private app: App;
+    private plugin: TaskFilterPlugin;
     private component: Component;
+    private mentionIndex: MentionIndex;
     private date: string; // YYYY-MM-DD
+    // 编辑卡片打开时压入的按键作用域（让 Mod+Enter 优先于全局快捷键）
+    private activeKeyScope: Scope | null = null;
     private containerEl: HTMLElement | null = null;
     // 当前展开的内嵌编辑器：新增模式，或正在编辑的条目（按首行原文识别）；draft 保存未提交的输入
     private editorState:
@@ -50,9 +58,11 @@ export class DayTimelineSection {
         | { mode: "edit"; headerRaw: string; draft: EntryDraft }
         | null = null;
 
-    constructor(app: App, component: Component) {
-        this.app = app;
+    constructor(plugin: TaskFilterPlugin, component: Component) {
+        this.app = plugin.app;
+        this.plugin = plugin;
         this.component = component;
+        this.mentionIndex = plugin.mentionIndex;
         this.date = moment().format("YYYY-MM-DD");
 
         // 看“今天”时每分钟刷新一次“正在进行”高亮；有编辑卡片展开时跳过，避免打扰输入
@@ -76,31 +86,55 @@ export class DayTimelineSection {
         }
     }
 
+    private setKeyScope(scope: Scope | null): void {
+        if (this.activeKeyScope) {
+            this.app.keymap.popScope(this.activeKeyScope);
+            this.activeKeyScope = null;
+        }
+        if (scope) {
+            this.app.keymap.pushScope(scope);
+            this.activeKeyScope = scope;
+        }
+    }
+
     private async renderContent(): Promise<void> {
         const container = this.containerEl;
         if (!container) return;
+
+        // 每次重渲染先弹出旧作用域；如果编辑卡片仍然存在，下面会重新压入
+        this.setKeyScope(null);
 
         const file = this.findDailyNote();
         this.renderDateNav(container, file);
 
         let block: TimelineBlock | null = null;
         let entries: DayEntry[] = [];
+        let memos: MemoEntry[] = [];
 
         if (file) {
             const content = await this.app.vault.cachedRead(file);
-            block = this.findTimelineBlock(content.split("\n"));
+            const contentLines = content.split("\n");
+            block = this.findTimelineBlock(contentLines);
             if (block) {
                 entries = this.parseDayEntries(block.blockLines);
+            }
+            if (this.plugin.settings.dayTimelineShowMemos) {
+                memos = extractMemos(contentLines);
             }
         }
 
         this.renderAddTrigger(container);
 
-        entries.sort((a, b) => a.startSeconds - b.startSeconds);
+        // 时间段条目与 memos 合并，统一按时间升序
+        const renderItems: Array<{ sortKey: number; entry?: DayEntry; memo?: MemoEntry }> = [
+            ...entries.map(e => ({ sortKey: e.startSeconds, entry: e })),
+            ...memos.map(m => ({ sortKey: m.timeSeconds, memo: m })),
+        ];
+        renderItems.sort((a, b) => a.sortKey - b.sortKey);
 
         const timelineEl = container.createEl("div", { cls: "ob-timeline ob-timeline-day day-timeline-body" });
 
-        if (entries.length === 0) {
+        if (renderItems.length === 0) {
             timelineEl.createEl("p", {
                 text: "这一天还没有时间段记录",
                 cls: "ob-timeline-empty",
@@ -112,7 +146,15 @@ export class DayTimelineSection {
         const now = new Date();
         const nowSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
-        for (const entry of entries) {
+        for (const item of renderItems) {
+            if (item.memo) {
+                if (file) {
+                    await this.renderMemoItem(timelineEl, item.memo, file);
+                }
+                continue;
+            }
+            const entry = item.entry;
+            if (!entry) continue;
             // 正在编辑的条目：原地替换为编辑卡片
             if (this.editorState?.mode === "edit"
                 && this.editorState.headerRaw === entry.headerRaw
@@ -169,6 +211,32 @@ export class DayTimelineSection {
         }
     }
 
+    // 渲染单条 memo（来自 Journal Memos 的 ```memos 块），点击跳转到笔记对应位置
+    private async renderMemoItem(container: HTMLElement, memo: MemoEntry, file: TFile): Promise<void> {
+        const itemEl = container.createEl("div", { cls: "ob-timeline-item is-memo" });
+        itemEl.setAttribute("title", "点击在笔记中定位此 memo");
+        itemEl.addEventListener("click", () => {
+            void this.openNoteAtLine(file, memo.line + 1);
+        });
+
+        const timeEl = itemEl.createEl("div", { cls: "ob-timeline-time" });
+        timeEl.createEl("span", { text: memo.label, cls: "ob-timeline-time-label" });
+        // eslint-disable-next-line obsidianmd/ui/sentence-case -- 小写 memo 为徽标样式
+        timeEl.createEl("span", { text: "memo", cls: "ob-timeline-memo-badge" });
+
+        const axisEl = itemEl.createEl("div", { cls: "ob-timeline-axis" });
+        axisEl.createEl("div", { cls: "ob-timeline-dot" });
+        axisEl.createEl("div", { cls: "ob-timeline-line" });
+
+        const cardEl = itemEl.createEl("div", { cls: "ob-timeline-card" });
+        if (memo.text) {
+            const contentEl = cardEl.createEl("div", { cls: "ob-timeline-memo-content" });
+            await MarkdownRenderer.render(this.app, memo.text, contentEl, file.path, this.component);
+        } else {
+            cardEl.createEl("div", { text: "（空 memo）", cls: "ob-timeline-desc" });
+        }
+    }
+
     // 日期导航：◀ 今天 ▶ + 日期选择
     private renderDateNav(container: HTMLElement, file: TFile | null): void {
         const navEl = container.createEl("div", { cls: "day-timeline-nav" });
@@ -222,6 +290,22 @@ export class DayTimelineSection {
             this.editorState = null;
             this.date = moment().format("YYYY-MM-DD");
             this.rerender();
+        });
+
+        // memos 显示开关
+        const showMemos = this.plugin.settings.dayTimelineShowMemos;
+        const memosBtn = navEl.createEl("button", {
+            text: "💬",
+            cls: `day-timeline-nav-btn day-timeline-memos-btn ${showMemos ? "is-active" : ""}`,
+            attr: { "aria-label": showMemos ? "隐藏 memos" : "显示 memos" },
+        });
+        setTooltip(memosBtn, showMemos ? "隐藏 memos" : "在时间线中显示 memos");
+        memosBtn.addEventListener("click", () => {
+            void (async () => {
+                this.plugin.settings.dayTimelineShowMemos = !this.plugin.settings.dayTimelineShowMemos;
+                await this.plugin.saveSettings();
+                this.rerender();
+            })();
         });
 
         // 右侧：每日笔记状态胶囊
@@ -308,9 +392,9 @@ export class DayTimelineSection {
                 lines.splice(block.fenceEnd, 0, ...entryLines);
                 return lines.join("\n");
             }
-            // 没有块：在文末追加一个
+            // 没有块：在文末追加二级标题 + 时间线块
             const suffix = content.endsWith("\n") || content.length === 0 ? "" : "\n";
-            return `${content}${suffix}\n\`\`\`ob-timeline\nmode: day\n${entryLines.join("\n")}\n\`\`\`\n`;
+            return `${content}${suffix}\n## 时间线\n\n\`\`\`ob-timeline\nmode: day\n${entryLines.join("\n")}\n\`\`\`\n`;
         });
 
         new Notice(`已添加：${entryLines[0] || ""}`);
@@ -715,6 +799,7 @@ export class DayTimelineSection {
         titleInput.value = options.title;
         titleInputValue = () => titleInput.value;
         titleInput.addEventListener("input", () => emitChange());
+        attachMentionAutocomplete(cardEl, titleInput, this.mentionIndex);
 
         const descArea = bodyEl.createEl("textarea", {
             cls: "dtm-desc-area",
@@ -729,6 +814,7 @@ export class DayTimelineSection {
         };
         descArea.addEventListener("input", () => { desc = descArea.value; autoResize(); emitChange(); });
         window.requestAnimationFrame(autoResize);
+        attachMentionAutocomplete(cardEl, descArea, this.mentionIndex);
 
         // ── 底部工具栏：左侧图标操作，右侧取消/保存 ──
         const footerEl = cardEl.createEl("div", { cls: "dtm-footer" });
@@ -774,9 +860,12 @@ export class DayTimelineSection {
         const saveBtn = buttonsEl.createEl("button", { text: options.saveLabel, cls: "dtm-save-btn" });
         saveBtn.addEventListener("click", () => void save());
 
-        // 回车快捷保存（描述多行区除外），Esc 取消
+        // Cmd/Ctrl+Enter 随处保存；回车快捷保存（描述多行区除外）；Esc 取消
         cardEl.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void save();
+            } else if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
                 e.preventDefault();
                 void save();
             } else if (e.key === "Escape") {
@@ -784,6 +873,20 @@ export class DayTimelineSection {
                 options.onCancel();
             }
         });
+
+        // Mod+Enter 注册到 Obsidian 按键作用域栈顶，避免被全局快捷键抢先拦截
+        const scope = new Scope(this.app.scope);
+        scope.register(["Mod"], "Enter", (evt) => {
+            if (!cardEl.isConnected) {
+                // 卡片已被销毁（如外部重渲染），清理作用域并放行
+                this.setKeyScope(null);
+                return true;
+            }
+            evt.preventDefault();
+            void save();
+            return false;
+        });
+        this.setKeyScope(scope);
 
         titleInput.focus();
     }

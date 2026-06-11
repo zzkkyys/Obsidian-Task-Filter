@@ -1408,6 +1408,48 @@
     margin: 0;
 }
 
+/* memo 条目（来自 Journal Memos 的 ```memos 块） */
+.ob-timeline-item.is-memo .ob-timeline-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 7px;
+    background-color: transparent;
+    border: 2px solid #f59e0b;
+}
+
+.ob-timeline-item.is-memo .ob-timeline-time-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.ob-timeline-memo-badge {
+    font-size: 10px;
+    color: #b45309;
+    background-color: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 0 6px;
+    border-radius: 8px;
+    line-height: 1.5;
+}
+
+.theme-dark .ob-timeline-memo-badge {
+    color: #fcd34d;
+}
+
+.ob-timeline-item.is-memo .ob-timeline-card {
+    background-color: transparent;
+    border-style: dashed;
+}
+
+.ob-timeline-memo-content {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.ob-timeline-memo-content p {
+    margin: 0;
+}
+
 /* 正在进行的条目（当天模式，仅今天的笔记） */
 .ob-timeline-item.is-now .ob-timeline-dot {
     background-color: #22c55e;
@@ -1459,6 +1501,17 @@
 .day-timeline-today-btn {
     color: var(--text-accent);
     font-weight: 600;
+}
+
+.day-timeline-memos-btn {
+    opacity: 0.45;
+    filter: grayscale(1);
+}
+
+.day-timeline-memos-btn.is-active {
+    opacity: 1;
+    filter: none;
+    border-color: var(--interactive-accent);
 }
 
 .day-timeline-date-input {
@@ -1574,6 +1627,7 @@ a.day-timeline-note-chip:hover {
 
 /* ========== 内嵌条目编辑卡片（memos 风格） ========== */
 .day-timeline-editor {
+    position: relative;
     display: flex;
     flex-direction: column;
     border-radius: 14px;
@@ -1583,6 +1637,36 @@ a.day-timeline-note-chip:hover {
     padding: 14px 16px 12px;
     margin-bottom: 16px;
     width: 100%;
+}
+
+/* 输入框内的 @人名 补全下拉 */
+.mention-input-suggest {
+    position: absolute;
+    z-index: 100;
+    min-width: 200px;
+    max-width: 320px;
+    max-height: 240px;
+    overflow-y: auto;
+    border-radius: 10px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    padding: 4px;
+}
+
+.mention-input-suggest-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.mention-input-suggest-item.is-selected {
+    background-color: var(--background-modifier-hover);
 }
 
 /* 顶部：时间段 + 时长 */

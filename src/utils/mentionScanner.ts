@@ -180,8 +180,12 @@ export class MentionIndex {
             return;
         }
 
-        // 去掉代码块，避免把代码里的 @ 当成提及
-        const stripped = content.replace(/```[\s\S]*?```|`[^`\n]*`/g, "");
+        // 去掉代码块，避免把代码里的 @ 当成提及；
+        // 但保留本插件的 ob-timeline 块，时间线条目里的 @人名 也要计入
+        const stripped = content.replace(
+            /```[^\n]*\n[\s\S]*?(?:```|$)|`[^`\n]*`/g,
+            (block) => /^```\s*ob-timeline\b/.test(block) ? block : ""
+        );
         const counts = new Map<string, number>();
         for (const match of stripped.matchAll(MENTION_REGEX)) {
             const name = match[1];

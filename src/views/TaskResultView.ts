@@ -653,7 +653,7 @@ export class TaskResultView extends ItemView {
         // 当天时间线视图：不需要任务工具栏，直接渲染
         if (this.viewMode === "timeline") {
             if (!this.dayTimelineSection) {
-                this.dayTimelineSection = new DayTimelineSection(this.app, this);
+                this.dayTimelineSection = new DayTimelineSection(this.plugin, this);
             }
             const timelineContainer = mainContainer.createEl("div", {
                 cls: "day-timeline-container",

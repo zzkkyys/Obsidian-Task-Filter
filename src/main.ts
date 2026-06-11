@@ -1,18 +1,25 @@
-import { Plugin, WorkspaceLeaf, setIcon } from "obsidian";
+import { Plugin, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings";
 import { TagFilterView, TAG_FILTER_VIEW_TYPE } from "./views/TagFilterView";
 import { TaskResultView, TASK_RESULT_VIEW_TYPE } from "./views/TaskResultView";
 import { TaskBlockRenderer } from "./views/TaskBlockRenderer";
+import { TimelineBlockRenderer } from "./views/TimelineBlockRenderer";
+import { MentionIndex } from "./utils/mentionScanner";
+import { MentionSuggest } from "./suggest/MentionSuggest";
+import { mentionDecorator } from "./editor/mentionDecorator";
+import { processMentionsInElement } from "./views/mentionPostProcessor";
 import { copyTaskSkillToClipboard } from "./skills/taskSkill";
 
 export default class TaskFilterPlugin extends Plugin {
     settings: MyPluginSettings;
+    mentionIndex: MentionIndex;
     private taskResultView: TaskResultView | null = null;
     private settingsSidebarObserver: MutationObserver | null = null;
     private iconApplyRafId: number | null = null;
 
     async onload() {
         await this.loadSettings();
+        this.mentionIndex = new MentionIndex(this.app);
         this.setupSettingsSidebarIconObserver();
 
         // 注册标签过滤视图
@@ -95,10 +102,53 @@ export default class TaskFilterPlugin extends Plugin {
             })
         );
 
+        // 提及索引增量维护：只重扫发生变化的文件
+        this.registerEvent(
+            this.app.vault.on("modify", (file) => {
+                if (file instanceof TFile) {
+                    void this.mentionIndex.onFileChanged(file);
+                }
+            })
+        );
+        this.registerEvent(
+            this.app.vault.on("create", (file) => {
+                if (file instanceof TFile) {
+                    void this.mentionIndex.onFileChanged(file);
+                }
+            })
+        );
+        this.registerEvent(
+            this.app.vault.on("delete", (file) => {
+                this.mentionIndex.onFileDeleted(file.path);
+            })
+        );
+        this.registerEvent(
+            this.app.vault.on("rename", (file, oldPath) => {
+                this.mentionIndex.onFileRenamed(oldPath, file.path);
+            })
+        );
+
+        // 注册 @人名 编辑器补全
+        this.registerEditorSuggest(new MentionSuggest(this));
+
+        // 实时预览：@人名 渲染成气泡
+        this.registerEditorExtension(mentionDecorator);
+
+        // 阅读视图：@人名 渲染成气泡（点击搜索，Cmd/Ctrl+点击打开人物笔记）
+        this.registerMarkdownPostProcessor((el) => {
+            processMentionsInElement(this, el);
+        });
+
         // 注册 ob-task 代码块 processor
         this.registerMarkdownCodeBlockProcessor("ob-task", (source, el, ctx) => {
             const renderer = new TaskBlockRenderer(this.app, el, source, ctx);
             // 异步渲染
+            ctx.addChild(renderer);
+        });
+
+        // 注册 ob-timeline 代码块 processor（日期模式 + 当天模式）
+        this.registerMarkdownCodeBlockProcessor("ob-timeline", (source, el, ctx) => {
+            const renderer = new TimelineBlockRenderer(this.app, el, source, ctx);
             ctx.addChild(renderer);
         });
     }

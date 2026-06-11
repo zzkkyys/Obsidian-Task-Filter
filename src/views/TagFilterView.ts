@@ -1,6 +1,7 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, Menu, Modal, Notice, WorkspaceLeaf } from "obsidian";
 import type TaskFilterPlugin from "../main";
 import { getAllTags, TagInfo } from "../utils/tagScanner";
+import { MentionInfo, openMentionSearch, openPersonNote, renameMention } from "../utils/mentionScanner";
 import { TaskResultView, TASK_RESULT_VIEW_TYPE } from "./TaskResultView";
 
 export const TAG_FILTER_VIEW_TYPE = "tag-filter-view";
@@ -14,11 +15,22 @@ interface TagTreeNode {
     isLeaf: boolean;        // 是否叶子节点
 }
 
+// 提及树节点（多级人名，如 hit/zhangsan）
+interface MentionTreeNode {
+    name: string;           // 当前级名称
+    fullName: string;       // 完整人名（不含 @）
+    count: number;          // 该人名的出现次数
+    children: Map<string, MentionTreeNode>;
+}
+
 export class TagFilterView extends ItemView {
     plugin: TaskFilterPlugin;
     private selectedTags: Set<string> = new Set();
     private tags: TagInfo[] = [];
     private expandedGroups: Set<string> = new Set();  // 展开的父标签集合
+    private mentions: MentionInfo[] = [];
+    private expandedMentionGroups: Set<string> = new Set();  // 展开的提及分组
+    private mentionSectionCollapsed = false;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskFilterPlugin) {
         super(leaf);
@@ -51,6 +63,7 @@ export class TagFilterView extends ItemView {
         // 过滤掉隐藏的标签
         const hiddenTags = this.plugin.settings.hiddenTags.map(t => t.toLowerCase());
         this.tags = allTags.filter(tagInfo => !hiddenTags.includes(tagInfo.tag.toLowerCase()));
+        this.mentions = await this.plugin.mentionIndex.getAllMentions();
         this.render();
     }
 
@@ -166,6 +179,203 @@ export class TagFilterView extends ItemView {
             const tree = this.buildTagTree();
             this.renderTagTree(tagListEl, tree, 0);
         }
+
+        // 提及区块（列出库中所有 @人名）
+        this.renderMentionSection(mainContainer);
+    }
+
+    // 构建提及树（按 / 分级）
+    private buildMentionTree(): MentionTreeNode {
+        const root: MentionTreeNode = {
+            name: "",
+            fullName: "",
+            count: 0,
+            children: new Map(),
+        };
+
+        for (const mention of this.mentions) {
+            const parts = mention.name.split("/");
+            let currentNode = root;
+            let currentPath = "";
+
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                if (!part) continue;
+
+                currentPath = i === 0 ? part : `${currentPath}/${part}`;
+
+                if (!currentNode.children.has(part)) {
+                    currentNode.children.set(part, {
+                        name: part,
+                        fullName: currentPath,
+                        count: 0,
+                        children: new Map(),
+                    });
+                }
+
+                const nextNode = currentNode.children.get(part);
+                if (!nextNode) continue;
+                currentNode = nextNode;
+
+                if (i === parts.length - 1) {
+                    currentNode.count = mention.count;
+                }
+            }
+        }
+
+        return root;
+    }
+
+    private renderMentionSection(mainContainer: HTMLElement): void {
+        const sectionEl = mainContainer.createEl("div", {
+            cls: "mention-section",
+        });
+
+        // 区块标题（可折叠）
+        const headerEl = sectionEl.createEl("div", {
+            cls: "mention-section-header",
+        });
+        const toggleEl = headerEl.createEl("span", {
+            cls: "tag-filter-toggle",
+        });
+        toggleEl.setText(this.mentionSectionCollapsed ? "▶" : "▼");
+        headerEl.createEl("h4", { text: "提及" });
+        if (this.mentions.length > 0) {
+            headerEl.createEl("span", {
+                text: `(${this.mentions.length})`,
+                cls: "tag-filter-tag-count",
+            });
+        }
+        headerEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.mentionSectionCollapsed = !this.mentionSectionCollapsed;
+            this.render();
+        });
+
+        if (this.mentionSectionCollapsed) return;
+
+        const listEl = sectionEl.createEl("div", {
+            cls: "mention-list",
+        });
+
+        if (this.mentions.length === 0) {
+            listEl.createEl("p", {
+                text: "未找到任何提及（在笔记中用 @人名 来添加）",
+                cls: "tag-filter-empty",
+            });
+            return;
+        }
+
+        const tree = this.buildMentionTree();
+        this.renderMentionTree(listEl, tree, 0);
+    }
+
+    private renderMentionTree(container: HTMLElement, node: MentionTreeNode, depth: number): void {
+        const sortedChildren = Array.from(node.children.values()).sort((a, b) =>
+            a.name.localeCompare(b.name)
+        );
+
+        for (const child of sortedChildren) {
+            const hasChildren = child.children.size > 0;
+            const isExpanded = this.expandedMentionGroups.has(child.fullName);
+
+            const itemEl = container.createEl("div", {
+                cls: `tag-filter-item mention-item depth-${depth} ${hasChildren ? "has-children" : ""}`,
+            });
+
+            if (hasChildren) {
+                const toggleEl = itemEl.createEl("span", {
+                    cls: `tag-filter-toggle ${isExpanded ? "" : "is-collapsed"}`,
+                });
+                toggleEl.setText(isExpanded ? "▼" : "▶");
+            }
+
+            const displayName = depth === 0 ? `@${child.name}` : child.name;
+            itemEl.createEl("span", {
+                text: displayName,
+                cls: "tag-filter-tag-name mention-name",
+            });
+
+            if (child.count > 0) {
+                itemEl.createEl("span", {
+                    text: `(${child.count})`,
+                    cls: "tag-filter-tag-count",
+                });
+            }
+
+            itemEl.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (hasChildren) {
+                    // 父节点：展开/折叠
+                    if (isExpanded) {
+                        this.expandedMentionGroups.delete(child.fullName);
+                    } else {
+                        this.expandedMentionGroups.add(child.fullName);
+                    }
+                    this.render();
+                } else if ((e.metaKey || e.ctrlKey) && this.plugin.settings.mentionNotesFolder) {
+                    // Cmd/Ctrl+点击：打开人物笔记
+                    void openPersonNote(this.app, this.plugin.settings.mentionNotesFolder, child.fullName);
+                } else {
+                    // 叶子节点：打开全局搜索
+                    this.searchMention(child.fullName);
+                }
+            });
+
+            // 右键菜单：重命名/人物笔记
+            if (!hasChildren) {
+                itemEl.addEventListener("contextmenu", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showMentionMenu(e, child.fullName);
+                });
+            }
+
+            if (hasChildren && isExpanded) {
+                const childrenEl = container.createEl("div", {
+                    cls: "mention-children",
+                });
+                this.renderMentionTree(childrenEl, child, depth + 1);
+            }
+        }
+    }
+
+    // 用全局搜索定位某个人名的所有提及
+    private searchMention(name: string): void {
+        openMentionSearch(this.app, name);
+    }
+
+    // 提及右键菜单
+    private showMentionMenu(e: MouseEvent, name: string): void {
+        const menu = new Menu();
+
+        menu.addItem(item => item
+            .setTitle("搜索所有提及")
+            .setIcon("search")
+            .onClick(() => this.searchMention(name)));
+
+        if (this.plugin.settings.mentionNotesFolder) {
+            menu.addItem(item => item
+                .setTitle("打开人物笔记")
+                .setIcon("file-text")
+                .onClick(() => {
+                    void openPersonNote(this.app, this.plugin.settings.mentionNotesFolder, name);
+                }));
+        }
+
+        menu.addItem(item => item
+            .setTitle("重命名 / 合并…")
+            .setIcon("pencil")
+            .onClick(() => {
+                new RenameMentionModal(this.app, name, async (newName) => {
+                    const changed = await renameMention(this.app, name, newName);
+                    new Notice(`已把 @${name} 改为 @${newName}（${changed} 个文件）`);
+                    this.plugin.mentionIndex.markDirty();
+                    await this.refresh();
+                }).open();
+            }));
+
+        menu.showAtMouseEvent(e);
     }
 
     private renderTagTree(container: HTMLElement, node: TagTreeNode, depth: number): void {
@@ -355,5 +565,71 @@ export class TagFilterView extends ItemView {
         if (view && typeof view.setSelectedTags === "function") {
             await view.setSelectedTags(selectedTagsArray);
         }
+    }
+}
+
+/** 重命名/合并提及的输入弹窗 */
+class RenameMentionModal extends Modal {
+    private oldName: string;
+    private onSubmit: (newName: string) => Promise<void>;
+
+    constructor(app: App, oldName: string, onSubmit: (newName: string) => Promise<void>) {
+        super(app);
+        this.oldName = oldName;
+        this.onSubmit = onSubmit;
+    }
+
+    onOpen(): void {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl("h3", { text: `重命名 @${this.oldName}` });
+        contentEl.createEl("p", {
+            text: "将在整个库中替换该人名；如果新名字已存在，则相当于合并。",
+            cls: "setting-item-description",
+        });
+
+        const input = contentEl.createEl("input", {
+            type: "text",
+            cls: "rename-mention-input",
+            attr: { placeholder: "新人名，如 hit/zhangsan" },
+        });
+        input.value = this.oldName;
+        input.focus();
+        input.select();
+
+        const submit = async (): Promise<void> => {
+            const newName = input.value.trim().replace(/^@/, "");
+            if (!newName) {
+                new Notice("请输入新人名");
+                return;
+            }
+            if (!/^[\p{L}\p{N}_-]+(?:\/[\p{L}\p{N}_-]+)*$/u.test(newName)) {
+                new Notice("人名只能包含中文、字母、数字、_、-，多级用 / 分隔");
+                return;
+            }
+            if (newName === this.oldName) {
+                this.close();
+                return;
+            }
+            this.close();
+            await this.onSubmit(newName);
+        };
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                void submit();
+            }
+        });
+
+        const btnRow = contentEl.createEl("div", { cls: "rename-mention-btns" });
+        const cancelBtn = btnRow.createEl("button", { text: "取消" });
+        cancelBtn.addEventListener("click", () => this.close());
+        const okBtn = btnRow.createEl("button", { text: "重命名", cls: "mod-cta" });
+        okBtn.addEventListener("click", () => void submit());
+    }
+
+    onClose(): void {
+        this.contentEl.empty();
     }
 }

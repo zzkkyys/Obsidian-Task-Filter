@@ -1044,7 +1044,7 @@
 }
 
 
-/* ��Ŀ��ͼ��ͷ�Ҳࣺ��ť + ���� */
+/* ��Ŀ��ͼ��ͷ�Ҳࣺ��ť + ���� */
 .task-kanban-column-header-right {
     display: flex;
     align-items: center;
@@ -1061,7 +1061,7 @@
 }
 
 
-/* ========== רע��ͼ ========== */
+/* ========== רע��ͼ ========== */
 .task-focus-container {
     margin-top: 20px;
     padding: 16px;
@@ -1153,7 +1153,7 @@
 }
 
 
-/* ��������� */
+/* ��������� */
 .task-subtask-count {
     font-size: 10px;
     color: var(--text-muted);
@@ -1162,4 +1162,618 @@
     background-color: var(--background-modifier-hover);
     padding: 1px 4px;
     border-radius: 8px;
+}
+
+/* ========== 提及（@人名） ========== */
+/* 侧边栏提及区块 */
+.mention-section {
+    margin-top: 16px;
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 8px;
+}
+
+.mention-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 0;
+}
+
+.mention-section-header h4 {
+    margin: 0;
+}
+
+.mention-list {
+    margin-top: 6px;
+}
+
+.mention-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.mention-item:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.mention-name {
+    color: var(--text-accent);
+}
+
+.mention-children {
+    margin-left: 16px;
+    border-left: 1px solid var(--background-modifier-border);
+    padding-left: 4px;
+}
+
+/* @ 补全弹窗 */
+.mention-suggest-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.mention-suggest-name {
+    display: inline-flex;
+    align-items: center;
+}
+
+.mention-suggest-at {
+    color: var(--text-accent);
+    font-weight: 600;
+    margin-right: 1px;
+}
+
+.mention-suggest-sep {
+    color: var(--text-muted);
+    margin: 0 2px;
+}
+
+.mention-suggest-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background-color: var(--background-modifier-hover);
+    padding: 1px 6px;
+    border-radius: 8px;
+}
+
+.mention-suggest-new {
+    font-size: 11px;
+    color: var(--text-on-accent);
+    background-color: var(--interactive-accent);
+    padding: 1px 6px;
+    border-radius: 8px;
+}
+
+/* 重命名提及弹窗 */
+.rename-mention-input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    font-size: 14px;
+    margin: 8px 0 14px;
+}
+
+.rename-mention-btns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* 正文中的 @人名 气泡（实时预览 mark 装饰 + 阅读视图 span） */
+.mention-chip {
+    display: inline;
+    background-color: rgba(99, 102, 241, 0.12);
+    color: #4f46e5;
+    border: 1px solid rgba(99, 102, 241, 0.30);
+    border-radius: 999px;
+    padding: 1px 7px 2px 6px;
+    font-size: 0.92em;
+    font-weight: 500;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    white-space: nowrap;
+}
+
+.theme-dark .mention-chip {
+    background-color: rgba(129, 140, 248, 0.18);
+    color: #a5b4fc;
+    border-color: rgba(129, 140, 248, 0.35);
+}
+
+.mention-chip-clickable {
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mention-chip-clickable:hover {
+    background-color: rgba(99, 102, 241, 0.22);
+    border-color: rgba(99, 102, 241, 0.55);
+}
+
+.theme-dark .mention-chip-clickable:hover {
+    background-color: rgba(129, 140, 248, 0.30);
+    border-color: rgba(129, 140, 248, 0.60);
+}
+
+.mention-chip-at {
+    opacity: 0.65;
+    font-weight: 600;
+    margin-right: 1px;
+}
+
+/* ========== ob-timeline 时间线 ========== */
+.ob-timeline {
+    margin: 12px 0;
+    padding: 4px 0;
+}
+
+.ob-timeline-item {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+}
+
+/* 左侧时间列 */
+.ob-timeline-time {
+    flex: 0 0 92px;
+    text-align: right;
+    padding-top: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.ob-timeline-day .ob-timeline-time {
+    flex-basis: 104px;
+}
+
+.ob-timeline-time-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-accent);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ob-timeline-duration {
+    font-size: 11px;
+    color: var(--text-muted);
+    background-color: var(--background-modifier-hover);
+    padding: 0 6px;
+    border-radius: 8px;
+}
+
+/* 中间轴线 */
+.ob-timeline-axis {
+    flex: 0 0 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.ob-timeline-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--interactive-accent);
+    margin-top: 6px;
+    flex-shrink: 0;
+}
+
+.ob-timeline-line {
+    width: 2px;
+    flex: 1;
+    background-color: var(--background-modifier-border);
+    margin-top: 2px;
+}
+
+.ob-timeline-item:last-child .ob-timeline-line {
+    display: none;
+}
+
+/* 右侧内容卡片 */
+.ob-timeline-card {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.ob-timeline-title {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.ob-timeline-desc {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.ob-timeline-desc p {
+    margin: 0;
+}
+
+/* 正在进行的条目（当天模式，仅今天的笔记） */
+.ob-timeline-item.is-now .ob-timeline-dot {
+    background-color: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+}
+
+.ob-timeline-item.is-now .ob-timeline-card {
+    border-color: #22c55e;
+    background-color: rgba(34, 197, 94, 0.08);
+}
+
+.ob-timeline-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.ob-timeline-error {
+    color: var(--text-error);
+    font-size: 12px;
+}
+
+/* ========== 当天时间线子视图 ========== */
+.day-timeline-container {
+    padding: 4px 0;
+}
+
+/* 日期导航 */
+.day-timeline-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.day-timeline-nav-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.day-timeline-nav-btn:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.day-timeline-today-btn {
+    color: var(--text-accent);
+    font-weight: 600;
+}
+
+.day-timeline-date-input {
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.day-timeline-weekday {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 每日笔记状态胶囊（导航栏右侧） */
+.day-timeline-note-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding: 3px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-muted);
+    text-decoration: none;
+    max-width: 180px;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.day-timeline-note-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.day-timeline-note-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.day-timeline-note-chip.is-exists .day-timeline-note-dot {
+    background-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+.day-timeline-note-chip.is-missing .day-timeline-note-dot {
+    background-color: var(--text-faint);
+}
+
+a.day-timeline-note-chip {
+    cursor: pointer;
+}
+
+a.day-timeline-note-chip:hover {
+    border-color: var(--interactive-accent);
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
+/* 快捷添加卡片（memos 式输入占位） */
+.day-timeline-add-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    margin-bottom: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-faint);
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.day-timeline-add-card:hover {
+    border-color: var(--interactive-accent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.day-timeline-add-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: var(--background-modifier-hover);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.day-timeline-add-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.day-timeline-add-placeholder {
+    font-size: 14px;
+}
+
+/* 视图里的时间线条目可点击 */
+.day-timeline-body .ob-timeline-item {
+    cursor: pointer;
+    border-radius: 8px;
+}
+
+/* ========== 内嵌条目编辑卡片（memos 风格） ========== */
+.day-timeline-editor {
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    border: 1px solid var(--interactive-accent);
+    background-color: var(--background-primary);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.10);
+    padding: 14px 16px 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+/* 顶部：时间段 + 时长 */
+.day-timeline-editor .dtm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.day-timeline-editor .dtm-time-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.day-timeline-editor .dtm-time-input {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 2px 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-accent);
+    font-variant-numeric: tabular-nums;
+    width: auto;
+}
+
+.day-timeline-editor .dtm-time-input:focus {
+    outline: none;
+    box-shadow: none;
+    border-radius: 6px;
+    background-color: var(--background-modifier-hover);
+}
+
+.day-timeline-editor .dtm-time-arrow {
+    color: var(--text-faint);
+    font-size: 13px;
+}
+
+.day-timeline-editor .dtm-duration {
+    font-size: 12px;
+    color: var(--text-muted);
+    background-color: var(--background-modifier-hover);
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 中部：无边框大输入区 */
+.day-timeline-editor .dtm-body {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 2px 4px;
+}
+
+.day-timeline-editor .dtm-title-input {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding: 8px 2px 6px;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-normal);
+    width: 100%;
+}
+
+.day-timeline-editor .dtm-title-input:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.day-timeline-editor .dtm-title-input::placeholder {
+    color: var(--text-faint);
+    font-weight: 500;
+}
+
+.day-timeline-editor .dtm-desc-area {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    resize: none;
+    padding: 2px;
+    min-height: 72px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-normal);
+    font-family: inherit;
+    width: 100%;
+    overflow-y: auto;
+}
+
+.day-timeline-editor .dtm-desc-area:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.day-timeline-editor .dtm-desc-area::placeholder {
+    color: var(--text-faint);
+}
+
+/* 底部工具栏 */
+.day-timeline-editor .dtm-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.day-timeline-editor .dtm-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.day-timeline-editor .dtm-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.day-timeline-editor .dtm-icon-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.day-timeline-editor .dtm-delete-btn:hover {
+    color: var(--text-error);
+    background-color: rgba(220, 38, 38, 0.10);
+}
+
+.day-timeline-editor .dtm-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.day-timeline-editor .dtm-cancel-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+.day-timeline-editor .dtm-cancel-btn:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.day-timeline-editor .dtm-save-btn {
+    padding: 6px 22px;
+    border: none;
+    border-radius: 999px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.day-timeline-editor .dtm-save-btn:hover {
+    filter: brightness(1.1);
+}
+
+.day-timeline-editor .dtm-save-btn:active {
+    transform: scale(0.97);
+}
+
+.day-timeline-body .ob-timeline-item:hover .ob-timeline-card {
+    border-color: var(--interactive-accent);
 }

@@ -1,4 +1,5 @@
 import { App, ItemView, WorkspaceLeaf, TFile, Menu, Modal, Setting, Notice, setIcon } from "obsidian";
+import { DayTimelineSection } from "./DayTimelineSection";
 
 // 自定义通知，支持emoji和样式
 function showTaskNotice(msg: string, emoji: string) {
@@ -178,7 +179,7 @@ import { getTaskFiles, filterTaskFilesByTags, TaskFile } from "../utils/tagScann
 
 export const TASK_RESULT_VIEW_TYPE = "task-result-view";
 
-type ViewMode = "list" | "kanban" | "project" | "today" | "focus";
+type ViewMode = "list" | "kanban" | "project" | "today" | "focus" | "timeline";
 type SortMode = "due" | "priority" | "title" | "created";
 
 type TagTreeNode = {
@@ -218,6 +219,7 @@ export class TaskResultView extends ItemView {
     private resizeListenerRegistered: boolean = false;
     private projectFolderByName: Map<string, string> = new Map();
     private inferredProjectRoot: string | null = null;
+    private dayTimelineSection: DayTimelineSection | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: TaskFilterPlugin) {
         super(leaf);
@@ -574,7 +576,7 @@ export class TaskResultView extends ItemView {
             cls: "task-result-header",
         });
 
-        headerEl.createEl("h4", { text: "任务文件列表" });
+        headerEl.createEl("h4", { text: this.viewMode === "timeline" ? "当天时间线" : "任务文件列表" });
 
         // 视图切换按钮组
         const viewToggleEl = headerEl.createEl("div", {
@@ -631,12 +633,34 @@ export class TaskResultView extends ItemView {
             this.refresh();
         });
 
+        const timelineBtn = viewToggleEl.createEl("button", {
+            cls: `task-view-btn ${this.viewMode === "timeline" ? "is-active" : ""}`,
+            attr: { "aria-label": "当天时间线" },
+        });
+        timelineBtn.innerHTML = "🕒";
+        timelineBtn.addEventListener("click", () => {
+            this.viewMode = "timeline";
+            this.refresh();
+        });
+
         const refreshBtn = headerEl.createEl("button", {
             cls: "task-result-refresh-btn",
             attr: { "aria-label": "刷新" },
         });
         refreshBtn.innerHTML = "🔄";
         refreshBtn.addEventListener("click", () => this.refresh());
+
+        // 当天时间线视图：不需要任务工具栏，直接渲染
+        if (this.viewMode === "timeline") {
+            if (!this.dayTimelineSection) {
+                this.dayTimelineSection = new DayTimelineSection(this.app, this);
+            }
+            const timelineContainer = mainContainer.createEl("div", {
+                cls: "day-timeline-container",
+            });
+            this.dayTimelineSection.render(timelineContainer);
+            return;
+        }
 
         // 工具栏：排序和过滤选项
         const toolbarEl = mainContainer.createEl("div", {

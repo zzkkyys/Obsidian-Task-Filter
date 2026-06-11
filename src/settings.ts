@@ -10,6 +10,7 @@ export interface MyPluginSettings {
 	projectViewMasonryMaxColumns: number;
 	projectViewMasonryMinColumnWidth: number;
 	projectViewMasonryMaxColumnWidth: number;
+	mentionNotesFolder: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -21,6 +22,7 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	projectViewMasonryMaxColumns: 4,
 	projectViewMasonryMinColumnWidth: 220,
 	projectViewMasonryMaxColumnWidth: 340,
+	mentionNotesFolder: '',
 }
 
 type SettingsPanelKey = 'tags' | 'project';
@@ -125,6 +127,18 @@ export class SampleSettingTab extends PluginSettingTab {
 						.split('\n')
 						.map(tag => tag.trim().toLowerCase())
 						.filter(tag => tag.length > 0);
+					await this.plugin.saveSettings();
+				}));
+
+		containerEl.createEl('h3', { text: '提及设置' });
+		new Setting(containerEl)
+			.setName('人物笔记目录')
+			.setDesc('设置后，按住 Cmd/Ctrl 点击 @人名 会打开（或创建）该目录下对应的人物笔记，如 People/hit/zhangsan.md。留空则关闭此功能。')
+			.addText(text => text
+				.setPlaceholder('People')
+				.setValue(this.plugin.settings.mentionNotesFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.mentionNotesFolder = value.trim();
 					await this.plugin.saveSettings();
 				}));
 	}

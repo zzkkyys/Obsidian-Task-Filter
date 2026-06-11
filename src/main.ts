@@ -20,6 +20,7 @@ export default class TaskFilterPlugin extends Plugin {
     async onload() {
         await this.loadSettings();
         this.mentionIndex = new MentionIndex(this.app);
+        this.applyTimelineImageSize();
         this.setupSettingsSidebarIconObserver();
 
         // 注册标签过滤视图
@@ -154,6 +155,7 @@ export default class TaskFilterPlugin extends Plugin {
     }
 
     onunload() {
+        document.body.style.removeProperty("--task-filter-timeline-img-size");
         // 关闭所有相关视图
         this.app.workspace.detachLeavesOfType(TAG_FILTER_VIEW_TYPE);
         this.app.workspace.detachLeavesOfType(TASK_RESULT_VIEW_TYPE);
@@ -174,6 +176,14 @@ export default class TaskFilterPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+    }
+
+    /** 把时间线缩略图最大尺寸写入 CSS 变量 */
+    applyTimelineImageSize(): void {
+        document.body.style.setProperty(
+            "--task-filter-timeline-img-size",
+            `${this.settings.timelineImageMaxSize}px`
+        );
     }
 
     notifySettingsSidebarIconMaybeChanged(): void {

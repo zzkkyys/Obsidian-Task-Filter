@@ -1,6 +1,7 @@
 import { App, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownRenderer, MarkdownView, TFile, moment } from "obsidian";
 import type { EditorView } from "@codemirror/view";
 import { MemoEntry, extractMemos } from "../utils/memoScanner";
+import { moveImagesToBottom, registerTimelineImageLightbox } from "./imageLightbox";
 
 interface TimelineEntry {
     label: string;       // 左侧展示的日期或时间段
@@ -160,6 +161,9 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
 
         const container = el.createEl("div", { cls: `ob-timeline ob-timeline-${mode}` });
 
+        // 点击卡片内图片打开灯箱预览
+        registerTimelineImageLightbox(this.app, container);
+
         if (renderItems.length === 0 && errors.length === 0) {
             container.createEl("p", {
                 text: mode === "day"
@@ -246,6 +250,7 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
             if (description) {
                 const descEl = cardEl.createEl("div", { cls: "ob-timeline-desc" });
                 await MarkdownRenderer.render(this.app, description, descEl, this.ctx.sourcePath, this);
+                moveImagesToBottom(cardEl);
             }
         }
 
@@ -374,6 +379,7 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         if (memo.text) {
             const contentEl = cardEl.createEl("div", { cls: "ob-timeline-memo-content" });
             await MarkdownRenderer.render(this.app, memo.text, contentEl, this.ctx.sourcePath, this);
+            moveImagesToBottom(cardEl);
         } else {
             cardEl.createEl("div", { text: "（空 memo）", cls: "ob-timeline-desc" });
         }

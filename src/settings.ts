@@ -12,6 +12,8 @@ export interface MyPluginSettings {
 	projectViewMasonryMaxColumnWidth: number;
 	mentionNotesFolder: string;
 	dayTimelineShowMemos: boolean;
+	timelineImageMaxSize: number;
+	timelineHeading: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -25,9 +27,11 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	projectViewMasonryMaxColumnWidth: 340,
 	mentionNotesFolder: '',
 	dayTimelineShowMemos: true,
+	timelineImageMaxSize: 200,
+	timelineHeading: '时间线',
 }
 
-type SettingsPanelKey = 'tags' | 'project';
+type SettingsPanelKey = 'tags' | 'project' | 'timeline';
 
 export class SampleSettingTab extends PluginSettingTab {
 	plugin: TaskFilterPlugin;
@@ -98,11 +102,60 @@ export class SampleSettingTab extends PluginSettingTab {
 
 		const tagPanelEl = createPanel('tags', '标签');
 		const projectPanelEl = createPanel('project', '项目与瀑布流');
+		const timelinePanelEl = createPanel('timeline', '时间线');
 
 		this.renderTagPanel(tagPanelEl);
 		this.renderProjectPanel(projectPanelEl);
+		this.renderTimelinePanel(timelinePanelEl);
 
 		setActivePanel('tags');
+	}
+
+	private renderTimelinePanel(containerEl: HTMLElement): void {
+		containerEl.createEl('h3', { text: '时间线设置' });
+
+		let imageSizeValueEl: HTMLElement | null = null;
+		new Setting(containerEl)
+			.setName('图片缩略图最大尺寸')
+			.setDesc('时间线卡片底部缩略图的最大宽度和高度（像素），点击缩略图可放大查看')
+			.addSlider(slider => slider
+				.setLimits(80, 480, 20)
+				.setValue(this.plugin.settings.timelineImageMaxSize)
+				.onChange(async (value) => {
+					this.plugin.settings.timelineImageMaxSize = value;
+					if (imageSizeValueEl) imageSizeValueEl.textContent = `${value}px`;
+					await this.plugin.saveSettings();
+					this.plugin.applyTimelineImageSize();
+				}))
+			.then(setting => {
+				imageSizeValueEl = setting.controlEl.createEl('span', {
+					text: `${this.plugin.settings.timelineImageMaxSize}px`,
+				});
+				imageSizeValueEl.style.marginLeft = '8px';
+				imageSizeValueEl.style.color = 'var(--text-muted)';
+				imageSizeValueEl.style.minWidth = '56px';
+			});
+
+		new Setting(containerEl)
+			.setName('在当天时间线中显示 memos')
+			.setDesc('把每日笔记里 Journal Memos 生成的 memos 按时间合并进当天时间线视图（视图导航栏的 💬 按钮也可切换）')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.dayTimelineShowMemos)
+				.onChange(async (value) => {
+					this.plugin.settings.dayTimelineShowMemos = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('自动创建时间线块的标题')
+			.setDesc('当天时间线视图往每日笔记写入新时间线块时，在块前添加的二级标题文字')
+			.addText(text => text
+				.setPlaceholder('时间线')
+				.setValue(this.plugin.settings.timelineHeading)
+				.onChange(async (value) => {
+					this.plugin.settings.timelineHeading = value.trim() || '时间线';
+					await this.plugin.saveSettings();
+				}));
 	}
 
 	private renderTagPanel(containerEl: HTMLElement): void {

@@ -3,6 +3,7 @@ import type TaskFilterPlugin from "../main";
 import { MentionIndex } from "../utils/mentionScanner";
 import { MemoEntry, extractMemos } from "../utils/memoScanner";
 import { attachMentionAutocomplete } from "../suggest/inputMentionSuggest";
+import { moveImagesToBottom, registerTimelineImageLightbox } from "./imageLightbox";
 
 // 当天模式条目头：HH:mm[:ss] - HH:mm[:ss] |
 const DAY_HEAD_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*[-~—–]\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*\|/;
@@ -134,6 +135,9 @@ export class DayTimelineSection {
 
         const timelineEl = container.createEl("div", { cls: "ob-timeline ob-timeline-day day-timeline-body" });
 
+        // 点击卡片内图片打开灯箱预览（捕获阶段，优先于条目的“点击编辑”）
+        registerTimelineImageLightbox(this.app, timelineEl);
+
         if (renderItems.length === 0) {
             timelineEl.createEl("p", {
                 text: "这一天还没有时间段记录",
@@ -207,6 +211,7 @@ export class DayTimelineSection {
             if (description) {
                 const descEl = cardEl.createEl("div", { cls: "ob-timeline-desc" });
                 await MarkdownRenderer.render(this.app, description, descEl, file?.path ?? "", this.component);
+                moveImagesToBottom(cardEl);
             }
         }
     }
@@ -232,6 +237,7 @@ export class DayTimelineSection {
         if (memo.text) {
             const contentEl = cardEl.createEl("div", { cls: "ob-timeline-memo-content" });
             await MarkdownRenderer.render(this.app, memo.text, contentEl, file.path, this.component);
+            moveImagesToBottom(cardEl);
         } else {
             cardEl.createEl("div", { text: "（空 memo）", cls: "ob-timeline-desc" });
         }
@@ -393,8 +399,9 @@ export class DayTimelineSection {
                 return lines.join("\n");
             }
             // 没有块：在文末追加二级标题 + 时间线块
+            const heading = this.plugin.settings.timelineHeading || "时间线";
             const suffix = content.endsWith("\n") || content.length === 0 ? "" : "\n";
-            return `${content}${suffix}\n## 时间线\n\n\`\`\`ob-timeline\nmode: day\n${entryLines.join("\n")}\n\`\`\`\n`;
+            return `${content}${suffix}\n## ${heading}\n\n\`\`\`ob-timeline\nmode: day\n${entryLines.join("\n")}\n\`\`\`\n`;
         });
 
         new Notice(`已添加：${entryLines[0] || ""}`);

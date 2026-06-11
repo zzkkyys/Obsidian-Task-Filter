@@ -1936,7 +1936,7 @@ dateCreated: ${formatTime(now)}
 
 `;
 
-            const file = await this.app.vault.create(filePath, content);
+            await this.app.vault.create(filePath, content);
             showTaskNotice(`任务「${title}」已创建`, "✨");
 
             // 刷新视图并打开文件

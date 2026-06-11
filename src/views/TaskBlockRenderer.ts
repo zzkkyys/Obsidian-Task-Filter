@@ -1,4 +1,4 @@
-import { MarkdownPostProcessorContext, App, TFile, MarkdownRenderChild } from "obsidian";
+import { MarkdownPostProcessorContext, App, MarkdownRenderChild } from "obsidian";
 import { getTaskFiles, TaskFile } from "../utils/tagScanner";
 
 export class TaskBlockRenderer extends MarkdownRenderChild {

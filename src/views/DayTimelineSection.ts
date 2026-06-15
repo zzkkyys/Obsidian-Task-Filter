@@ -2,6 +2,7 @@ import { App, Component, MarkdownRenderer, Notice, Scope, TFile, moment, normali
 import type TaskFilterPlugin from "../main";
 import { MentionIndex } from "../utils/mentionScanner";
 import { MemoEntry, extractMemos } from "../utils/memoScanner";
+import { CompletedTaskEntry, getCompletedTasksForDate } from "../utils/taskTimelineScanner";
 import { attachMentionAutocomplete } from "../suggest/inputMentionSuggest";
 import { moveImagesToBottom, registerTimelineImageLightbox } from "./imageLightbox";
 
@@ -124,12 +125,19 @@ export class DayTimelineSection {
             }
         }
 
+        // 已完成任务不依赖每日笔记是否存在，按 completedDate 全库扫描当天
+        let tasks: CompletedTaskEntry[] = [];
+        if (this.plugin.settings.dayTimelineShowTasks) {
+            tasks = await getCompletedTasksForDate(this.app, this.date);
+        }
+
         this.renderAddTrigger(container);
 
-        // 时间段条目与 memos 合并，统一按时间升序
-        const renderItems: Array<{ sortKey: number; entry?: DayEntry; memo?: MemoEntry }> = [
+        // 时间段条目、memos、已完成任务合并，统一按时间升序
+        const renderItems: Array<{ sortKey: number; entry?: DayEntry; memo?: MemoEntry; task?: CompletedTaskEntry }> = [
             ...entries.map(e => ({ sortKey: e.startSeconds, entry: e })),
             ...memos.map(m => ({ sortKey: m.timeSeconds, memo: m })),
+            ...tasks.map(t => ({ sortKey: t.timeSeconds, task: t })),
         ];
         renderItems.sort((a, b) => a.sortKey - b.sortKey);
 
@@ -155,6 +163,10 @@ export class DayTimelineSection {
                 if (file) {
                     await this.renderMemoItem(timelineEl, item.memo, file);
                 }
+                continue;
+            }
+            if (item.task) {
+                this.renderTaskItem(timelineEl, item.task);
                 continue;
             }
             const entry = item.entry;
@@ -243,6 +255,43 @@ export class DayTimelineSection {
         }
     }
 
+    // 渲染单条已完成任务（completedDate 落在当天的 #task），点击打开任务笔记
+    private renderTaskItem(container: HTMLElement, task: CompletedTaskEntry): void {
+        const itemEl = container.createEl("div", { cls: "ob-timeline-item is-task" });
+        itemEl.setAttribute("title", "点击打开任务笔记");
+        itemEl.addEventListener("click", () => {
+            void this.app.workspace.openLinkText(task.file.path, "", false);
+        });
+
+        const timeEl = itemEl.createEl("div", { cls: "ob-timeline-time" });
+        timeEl.createEl("span", {
+            text: task.hasTime ? task.label : "全天",
+            cls: "ob-timeline-time-label",
+        });
+        // eslint-disable-next-line obsidianmd/ui/sentence-case -- 小写 task 为徽标样式
+        timeEl.createEl("span", { text: "task", cls: "ob-timeline-task-badge" });
+
+        const axisEl = itemEl.createEl("div", { cls: "ob-timeline-axis" });
+        const dotEl = axisEl.createEl("div", { cls: "ob-timeline-dot" });
+        const priorityClass = this.priorityClass(task.priority);
+        if (priorityClass) dotEl.addClass(priorityClass);
+        axisEl.createEl("div", { cls: "ob-timeline-line" });
+
+        const cardEl = itemEl.createEl("div", { cls: "ob-timeline-card" });
+        const titleRow = cardEl.createEl("div", { cls: "ob-timeline-task-title" });
+        const checkEl = titleRow.createEl("span", { cls: "ob-timeline-task-check" });
+        setIcon(checkEl, "check-circle-2");
+        titleRow.createEl("span", { text: task.title, cls: "ob-timeline-task-name" });
+    }
+
+    private priorityClass(priority: string): string | null {
+        const p = (priority || "").toLowerCase();
+        if (p === "high" || p === "highest" || priority === "高") return "is-priority-high";
+        if (p === "medium" || priority === "中") return "is-priority-medium";
+        if (p === "low" || priority === "低") return "is-priority-low";
+        return null;
+    }
+
     // 日期导航：◀ 今天 ▶ + 日期选择
     private renderDateNav(container: HTMLElement, file: TFile | null): void {
         const navEl = container.createEl("div", { cls: "day-timeline-nav" });
@@ -309,6 +358,22 @@ export class DayTimelineSection {
         memosBtn.addEventListener("click", () => {
             void (async () => {
                 this.plugin.settings.dayTimelineShowMemos = !this.plugin.settings.dayTimelineShowMemos;
+                await this.plugin.saveSettings();
+                this.rerender();
+            })();
+        });
+
+        // 已完成任务显示开关
+        const showTasks = this.plugin.settings.dayTimelineShowTasks;
+        const tasksBtn = navEl.createEl("button", {
+            text: "✅",
+            cls: `day-timeline-nav-btn day-timeline-tasks-btn ${showTasks ? "is-active" : ""}`,
+            attr: { "aria-label": showTasks ? "隐藏已完成任务" : "显示已完成任务" },
+        });
+        setTooltip(tasksBtn, showTasks ? "隐藏已完成任务" : "在时间线中显示已完成任务");
+        tasksBtn.addEventListener("click", () => {
+            void (async () => {
+                this.plugin.settings.dayTimelineShowTasks = !this.plugin.settings.dayTimelineShowTasks;
                 await this.plugin.saveSettings();
                 this.rerender();
             })();

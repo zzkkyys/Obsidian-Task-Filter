@@ -4,6 +4,7 @@ import TaskFilterPlugin from "./main";
 export interface MyPluginSettings {
 	hiddenTags: string[];
 	pinnedProjects: string[];
+	projectRootFolder: string;
 	forceSettingsSidebarIcon: boolean;
 	projectViewMasonry: boolean;
 	projectViewPinnedOnly: boolean;
@@ -12,6 +13,7 @@ export interface MyPluginSettings {
 	projectViewMasonryMaxColumnWidth: number;
 	mentionNotesFolder: string;
 	dayTimelineShowMemos: boolean;
+	dayTimelineShowTasks: boolean;
 	timelineImageMaxSize: number;
 	timelineHeading: string;
 }
@@ -19,6 +21,7 @@ export interface MyPluginSettings {
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	hiddenTags: ['#task'],
 	pinnedProjects: [],
+	projectRootFolder: 'Projects',
 	forceSettingsSidebarIcon: true,
 	projectViewMasonry: true,
 	projectViewPinnedOnly: false,
@@ -27,6 +30,7 @@ export const DEFAULT_SETTINGS: MyPluginSettings = {
 	projectViewMasonryMaxColumnWidth: 340,
 	mentionNotesFolder: '',
 	dayTimelineShowMemos: true,
+	dayTimelineShowTasks: false,
 	timelineImageMaxSize: 200,
 	timelineHeading: '时间线',
 }
@@ -147,6 +151,16 @@ export class SampleSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName('在当天时间线中显示已完成任务')
+			.setDesc('把 completedDate 落在当天的 #task 任务按完成时间合并进当天时间线视图（视图导航栏的 ✅ 按钮也可切换）')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.dayTimelineShowTasks)
+				.onChange(async (value) => {
+					this.plugin.settings.dayTimelineShowTasks = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
 			.setName('自动创建时间线块的标题')
 			.setDesc('当天时间线视图往每日笔记写入新时间线块时，在块前添加的二级标题文字')
 			.addText(text => text
@@ -200,6 +214,18 @@ export class SampleSettingTab extends PluginSettingTab {
 
 	private renderProjectPanel(containerEl: HTMLElement): void {
 		containerEl.createEl('h3', { text: '项目设置' });
+
+		new Setting(containerEl)
+			.setName('项目根目录')
+			.setDesc('「项目」视图在此目录下创建和扫描项目（每个项目是一个含 _index.md 的子文件夹）。留空则扫描整个库。')
+			.addText(text => text
+				.setPlaceholder('Projects')
+				.setValue(this.plugin.settings.projectRootFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.projectRootFolder = value.trim();
+					await this.plugin.saveSettings();
+					this.plugin.refreshProjectViews();
+				}));
 
 		let pendingProjectName = '';
 		let projectInputEl: HTMLInputElement | null = null;

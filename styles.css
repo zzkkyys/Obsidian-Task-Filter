@@ -1450,6 +1450,72 @@
     margin: 0;
 }
 
+/* 已完成任务条目（completedDate 落在当天的 #task） */
+.ob-timeline-item.is-task .ob-timeline-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 7px;
+    background-color: #22c55e;
+    border: none;
+}
+
+.ob-timeline-item.is-task .ob-timeline-dot.is-priority-high {
+    background-color: #ef4444;
+}
+
+.ob-timeline-item.is-task .ob-timeline-dot.is-priority-medium {
+    background-color: #f59e0b;
+}
+
+.ob-timeline-item.is-task .ob-timeline-dot.is-priority-low {
+    background-color: #94a3b8;
+}
+
+.ob-timeline-item.is-task .ob-timeline-time-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.ob-timeline-task-badge {
+    font-size: 10px;
+    color: #15803d;
+    background-color: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    padding: 0 6px;
+    border-radius: 8px;
+    line-height: 1.5;
+}
+
+.theme-dark .ob-timeline-task-badge {
+    color: #86efac;
+}
+
+.ob-timeline-item.is-task .ob-timeline-card {
+    cursor: pointer;
+}
+
+.ob-timeline-task-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.ob-timeline-task-check {
+    display: inline-flex;
+    align-items: center;
+    color: #22c55e;
+}
+
+.ob-timeline-task-check .svg-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.ob-timeline-task-name {
+    font-weight: 500;
+}
+
 /* 卡片内图片：统一抽到底部附件行，从左到右排列成缩略图，点击放大。
    Obsidian 的 .internal-embed/.image-embed 自带宽度样式，必须连容器一起用 !important 压制 */
 .ob-timeline-attachments {
@@ -1641,12 +1707,14 @@
     font-weight: 600;
 }
 
-.day-timeline-memos-btn {
+.day-timeline-memos-btn,
+.day-timeline-tasks-btn {
     opacity: 0.45;
     filter: grayscale(1);
 }
 
-.day-timeline-memos-btn.is-active {
+.day-timeline-memos-btn.is-active,
+.day-timeline-tasks-btn.is-active {
     opacity: 1;
     filter: none;
     border-color: var(--interactive-accent);
@@ -1998,4 +2066,405 @@ a.day-timeline-note-chip:hover {
 
 .day-timeline-body .ob-timeline-item:hover .ob-timeline-card {
     border-color: var(--interactive-accent);
+}
+
+/* ===================== 项目视图 ProjectView ===================== */
+.tf-project-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+}
+.tf-project-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    flex: 0 0 auto;
+}
+.tf-project-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 16px;
+    font-weight: 700;
+}
+.tf-project-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.tf-project-icon {
+    display: inline-flex;
+    align-items: center;
+}
+.tf-project-icon svg {
+    width: 16px;
+    height: 16px;
+}
+.tf-project-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+}
+.tf-project-btn:hover {
+    background-color: var(--background-modifier-hover);
+}
+.tf-project-btn-cta {
+    border-color: var(--interactive-accent);
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+.tf-project-btn-cta:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+.tf-project-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.tf-project-list {
+    flex: 0 0 260px;
+    overflow-y: auto;
+    padding: 10px;
+    border-right: 1px solid var(--background-modifier-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.tf-project-detail {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 18px 22px;
+}
+
+/* 左侧项目卡片 */
+.tf-project-card {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    background-color: var(--background-primary);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tf-project-card:hover {
+    border-color: var(--interactive-accent);
+}
+.tf-project-card.is-active {
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 1px var(--interactive-accent) inset;
+}
+.tf-project-card-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 8px;
+}
+.tf-project-card-icon {
+    font-size: 16px;
+}
+.tf-project-card-name {
+    font-weight: 600;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tf-project-card-meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.tf-project-status-chip {
+    flex: 0 0 auto;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid;
+    background-color: var(--background-secondary);
+}
+
+/* 进度条 */
+.tf-project-progress {
+    height: 6px;
+    border-radius: 999px;
+    background-color: var(--background-modifier-border);
+    overflow: hidden;
+}
+.tf-project-progress-lg {
+    height: 10px;
+}
+.tf-project-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.2s ease;
+}
+
+/* 右侧详情 */
+.tf-project-detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+.tf-project-detail-icon {
+    font-size: 30px;
+    line-height: 1;
+}
+.tf-project-detail-headtext {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.tf-project-detail-name {
+    font-size: 20px;
+    font-weight: 700;
+}
+.tf-project-detail-sub {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 5px;
+}
+.tf-project-detail-dates {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.tf-project-detail-ops {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.tf-project-detail-desc {
+    margin: 14px 0 4px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.tf-project-overview {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 18px 0;
+}
+.tf-project-stat {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    background-color: var(--background-secondary);
+}
+.tf-project-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+}
+.tf-project-stat-label {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.tf-project-detail-progress {
+    margin: 14px 0 22px;
+}
+.tf-project-detail-progress-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.tf-project-tasks-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.tf-project-task-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.tf-project-task-row:hover {
+    background-color: var(--background-modifier-hover);
+}
+.tf-project-task-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+}
+.tf-project-task-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tf-project-task-due {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 空状态 */
+.tf-project-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 30px 14px;
+    color: var(--text-muted);
+}
+.tf-project-empty-emoji {
+    font-size: 32px;
+}
+.tf-project-empty-title {
+    font-weight: 600;
+    color: var(--text-normal);
+}
+.tf-project-empty-desc {
+    font-size: 12px;
+    line-height: 1.5;
+}
+.tf-project-detail-empty {
+    color: var(--text-muted);
+    padding: 18px 0;
+}
+.tf-project-form-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* ---- 项目卡片：折叠箭头与子板块导航 ---- */
+.tf-project-chevron {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+.tf-project-chevron svg {
+    width: 14px;
+    height: 14px;
+}
+.tf-project-card-head {
+    cursor: pointer;
+}
+.tf-project-nav {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--background-modifier-border);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.tf-project-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.tf-project-nav-item:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+.tf-project-nav-item.is-active {
+    background-color: var(--background-modifier-active-hover, var(--background-modifier-hover));
+    color: var(--text-normal);
+    font-weight: 600;
+}
+.tf-project-nav-icon {
+    display: inline-flex;
+    align-items: center;
+}
+.tf-project-nav-icon svg {
+    width: 15px;
+    height: 15px;
+}
+.tf-project-nav-label {
+    flex: 1 1 auto;
+}
+.tf-project-nav-count {
+    font-size: 11px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background-color: var(--background-modifier-border);
+    color: var(--text-muted);
+}
+
+/* ---- 详情：ID 标记、板块标题 ---- */
+.tf-project-detail-nameRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.tf-project-id-chip {
+    font-family: var(--font-monospace);
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 6px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+.tf-project-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 18px 0 12px;
+    font-size: 15px;
+    font-weight: 700;
+}
+.tf-project-section-body {
+    min-height: 0;
+}
+
+/* ---- 即将推出占位 ---- */
+.tf-project-coming-soon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 40px 16px;
+    border: 1px dashed var(--background-modifier-border);
+    border-radius: 12px;
+    color: var(--text-muted);
+}
+.tf-project-coming-soon-badge {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+}
+.tf-project-coming-soon-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+.tf-project-coming-soon-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 360px;
+}
+.tf-project-workitems-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
 }

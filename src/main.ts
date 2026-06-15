@@ -2,6 +2,7 @@ import { Plugin, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings";
 import { TagFilterView, TAG_FILTER_VIEW_TYPE } from "./views/TagFilterView";
 import { TaskResultView, TASK_RESULT_VIEW_TYPE } from "./views/TaskResultView";
+import { ProjectView, PROJECT_VIEW_TYPE } from "./views/ProjectView";
 import { TaskBlockRenderer } from "./views/TaskBlockRenderer";
 import { TimelineBlockRenderer } from "./views/TimelineBlockRenderer";
 import { MentionIndex } from "./utils/mentionScanner";
@@ -34,6 +35,11 @@ export default class TaskFilterPlugin extends Plugin {
             return this.taskResultView;
         });
 
+        // 注册项目视图
+        this.registerView(PROJECT_VIEW_TYPE, (leaf: WorkspaceLeaf) => {
+            return new ProjectView(leaf, this);
+        });
+
         // 添加功能区（ribbon）图标
         const ribbonIconEl = this.addRibbonIcon("tags", "打开任务筛选面板", async () => {
             await this.activateTagFilterView();
@@ -54,6 +60,12 @@ export default class TaskFilterPlugin extends Plugin {
                 <path d="M17.5 16.2v2.6" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
         `;
+
+        // 添加功能区图标：项目面板
+        const projectRibbonEl = this.addRibbonIcon("folder-kanban", "打开项目面板", () => {
+            this.activateProjectView();
+        });
+        projectRibbonEl.addClass("task-filter-project-ribbon-icon");
 
         // 添加命令：打开标签过滤器
         this.addCommand({
@@ -80,6 +92,15 @@ export default class TaskFilterPlugin extends Plugin {
             callback: async () => {
                 await this.activateTagFilterView();
                 await this.activateTaskResultView();
+            },
+        });
+
+        // 添加命令：打开项目面板
+        this.addCommand({
+            id: "open-project-view",
+            name: "打开项目面板",
+            callback: () => {
+                this.activateProjectView();
             },
         });
 
@@ -159,6 +180,7 @@ export default class TaskFilterPlugin extends Plugin {
         // 关闭所有相关视图
         this.app.workspace.detachLeavesOfType(TAG_FILTER_VIEW_TYPE);
         this.app.workspace.detachLeavesOfType(TASK_RESULT_VIEW_TYPE);
+        this.app.workspace.detachLeavesOfType(PROJECT_VIEW_TYPE);
 
         if (this.iconApplyRafId !== null) {
             window.cancelAnimationFrame(this.iconApplyRafId);
@@ -314,6 +336,36 @@ export default class TaskFilterPlugin extends Plugin {
     }
 
     /**
+     * 激活项目视图（在主区域打开标签页）
+     */
+    async activateProjectView(): Promise<void> {
+        const { workspace } = this.app;
+
+        let leaf = workspace.getLeavesOfType(PROJECT_VIEW_TYPE)[0];
+        if (!leaf) {
+            leaf = workspace.getLeaf("tab");
+            await leaf.setViewState({
+                type: PROJECT_VIEW_TYPE,
+                active: true,
+            });
+        }
+        workspace.revealLeaf(leaf);
+    }
+
+    /**
+     * 刷新所有项目视图（设置变更后调用）
+     */
+    refreshProjectViews(): void {
+        const leaves = this.app.workspace.getLeavesOfType(PROJECT_VIEW_TYPE);
+        for (const leaf of leaves) {
+            const view = leaf.view as ProjectView;
+            if (view && typeof view.refresh === "function") {
+                void view.refresh();
+            }
+        }
+    }
+
+    /**
      * 设置选中的标签并刷新任务结果视图
      */
     setSelectedTags(tags: string[]): void {
@@ -349,5 +401,8 @@ export default class TaskFilterPlugin extends Plugin {
         if (this.taskResultView) {
             this.taskResultView.refresh();
         }
+
+        // 刷新项目视图
+        this.refreshProjectViews();
     }
 }

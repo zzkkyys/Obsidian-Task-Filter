@@ -1,6 +1,7 @@
-import { App, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownRenderer, MarkdownView, TFile, moment } from "obsidian";
+import { App, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownRenderer, MarkdownView, TFile, moment, setIcon } from "obsidian";
 import type { EditorView } from "@codemirror/view";
 import { MemoEntry, extractMemos } from "../utils/memoScanner";
+import { CompletedTaskEntry, getCompletedTasksForDate } from "../utils/taskTimelineScanner";
 import { moveImagesToBottom, registerTimelineImageLightbox } from "./imageLightbox";
 
 interface TimelineEntry {
@@ -68,6 +69,7 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         let mode: TimelineMode | null = null;
         let sortDesc = false;
         let memosEnabled = false;
+        let tasksEnabled = false;
 
         // 先确定模式：显式 mode: 行优先，否则看首个条目头是否为时间段
         let firstHeadIndex = -1;
@@ -89,6 +91,11 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
                 memosEnabled = /^(true|on|yes)$/i.test(memosMatch[1]);
                 continue;
             }
+            const tasksMatch = line.match(/^tasks\s*:\s*(true|false|on|off|yes|no)$/i);
+            if (tasksMatch && tasksMatch[1]) {
+                tasksEnabled = /^(true|on|yes)$/i.test(tasksMatch[1]);
+                continue;
+            }
             if (firstHeadIndex === -1 && (DATE_HEAD_RE.test(line) || DAY_HEAD_RE.test(line))) {
                 firstHeadIndex = i;
                 if (mode === null) {
@@ -108,7 +115,7 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
             const rawLine = lines[i] || "";
             const line = rawLine.trim();
 
-            if (/^(mode\s*:\s*(date|day)|sort\s*:\s*(asc|desc)|memos\s*:\s*\w+)$/i.test(line) && !current) continue;
+            if (/^(mode\s*:\s*(date|day)|sort\s*:\s*(asc|desc)|memos\s*:\s*\w+|tasks\s*:\s*\w+)$/i.test(line) && !current) continue;
             if (line.startsWith("//")) continue;
 
             if (headRe.test(line)) {
@@ -151,9 +158,19 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
             }
         }
 
-        const renderItems: Array<{ sortKey: string; entry?: TimelineEntry; memo?: MemoEntry }> = [
+        // tasks: true 时把 completedDate 落在本笔记日期的 #task 合并进来（仅当天模式）
+        let tasks: CompletedTaskEntry[] = [];
+        if (tasksEnabled && mode === "day") {
+            const noteDate = this.getNoteDate();
+            if (noteDate) {
+                tasks = await getCompletedTasksForDate(this.app, noteDate);
+            }
+        }
+
+        const renderItems: Array<{ sortKey: string; entry?: TimelineEntry; memo?: MemoEntry; task?: CompletedTaskEntry }> = [
             ...entries.map(e => ({ sortKey: e.sortKey, entry: e })),
             ...memos.map(m => ({ sortKey: String(m.timeSeconds).padStart(6, "0"), memo: m })),
+            ...tasks.map(t => ({ sortKey: String(t.timeSeconds).padStart(6, "0"), task: t })),
         ];
         renderItems.sort((a, b) => sortDesc
             ? b.sortKey.localeCompare(a.sortKey)
@@ -180,6 +197,10 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         for (const item of renderItems) {
             if (item.memo) {
                 await this.renderMemoItem(container, item.memo);
+                continue;
+            }
+            if (item.task) {
+                this.renderTaskItem(container, item.task);
                 continue;
             }
             const entry = item.entry;
@@ -385,6 +406,43 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
         }
     }
 
+    // 渲染单条已完成任务（completedDate 落在本笔记日期的 #task），点击打开任务笔记
+    private renderTaskItem(container: HTMLElement, task: CompletedTaskEntry): void {
+        const itemEl = container.createEl("div", { cls: "ob-timeline-item is-task" });
+        itemEl.setAttribute("title", "点击打开任务笔记");
+        itemEl.addEventListener("click", () => {
+            void this.app.workspace.openLinkText(task.file.path, this.ctx.sourcePath, false);
+        });
+
+        const timeEl = itemEl.createEl("div", { cls: "ob-timeline-time" });
+        timeEl.createEl("span", {
+            text: task.hasTime ? task.label : "全天",
+            cls: "ob-timeline-time-label",
+        });
+        // eslint-disable-next-line obsidianmd/ui/sentence-case -- 小写 task 为徽标样式
+        timeEl.createEl("span", { text: "task", cls: "ob-timeline-task-badge" });
+
+        const axisEl = itemEl.createEl("div", { cls: "ob-timeline-axis" });
+        const dotEl = axisEl.createEl("div", { cls: "ob-timeline-dot" });
+        const priorityClass = this.priorityClass(task.priority);
+        if (priorityClass) dotEl.addClass(priorityClass);
+        axisEl.createEl("div", { cls: "ob-timeline-line" });
+
+        const cardEl = itemEl.createEl("div", { cls: "ob-timeline-card" });
+        const titleRow = cardEl.createEl("div", { cls: "ob-timeline-task-title" });
+        const checkEl = titleRow.createEl("span", { cls: "ob-timeline-task-check" });
+        setIcon(checkEl, "check-circle-2");
+        titleRow.createEl("span", { text: task.title, cls: "ob-timeline-task-name" });
+    }
+
+    private priorityClass(priority: string): string | null {
+        const p = (priority || "").toLowerCase();
+        if (p === "high" || p === "highest" || priority === "高") return "is-priority-high";
+        if (p === "medium" || priority === "中") return "is-priority-medium";
+        if (p === "low" || priority === "低") return "is-priority-low";
+        return null;
+    }
+
     // 找到渲染此代码块的 markdown 视图，优先当前激活的视图
     private findTargetView(): MarkdownView | null {
         const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -519,5 +577,29 @@ export class TimelineBlockRenderer extends MarkdownRenderChild {
     private currentSeconds(): number {
         const now = new Date();
         return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+    }
+
+    // 推断本笔记代表的日期（YYYY-MM-DD）：优先按“每日笔记”插件的命名格式解析，兜底匹配路径里的 YYYY-MM-DD
+    private getNoteDate(): string | null {
+        const basename = (this.ctx.sourcePath.split("/").pop() || "").replace(/\.md$/, "");
+
+        interface InternalPluginsApp {
+            internalPlugins?: {
+                getPluginById?: (id: string) => {
+                    instance?: { options?: { format?: string } };
+                } | null;
+            };
+        }
+        const appWithInternals = this.app as unknown as InternalPluginsApp;
+        const format = appWithInternals.internalPlugins?.getPluginById?.("daily-notes")?.instance?.options?.format?.trim();
+        if (format) {
+            // 格式可能带目录层级（如 YYYY/MM/YYYY-MM-DD），basename 只对应最后一段
+            const lastFmt = format.split("/").pop() || format;
+            const m = moment(basename, lastFmt, true);
+            if (m.isValid()) return m.format("YYYY-MM-DD");
+        }
+
+        const match = this.ctx.sourcePath.match(/(\d{4}-\d{2}-\d{2})/);
+        return match ? match[1] ?? null : null;
     }
 }
